@@ -2,6 +2,11 @@
 
 A typed client for the QMax API, the pieces that turn a quote into transactions, and links that send a user to QMax with the order filled in. Use it on your **server**: your API key spends your prepaid balance, so never put it in a browser.
 
+**Install** it from the site (an npm package with types; also one ES module file, `qmax-sdk.js`, for any runtime), and check the download against [SHA256SUMS](https://qmax.exchange/agents/SHA256SUMS):
+```bash
+npm install https://qmax.exchange/agents/qmax-sdk.tgz
+```
+
 ```ts
 import { QMaxClient, buildExecutionPlan, stepDestinationKey } from "@qmax/sdk";
 

@@ -17,6 +17,7 @@
     "agent-demo": "esbuild scripts/agent-demo.ts --bundle --platform=node --format=esm --outfile=.cache/agent-demo.mjs --log-level=warning --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\" && node .cache/agent-demo.mjs",
     "trades-check": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env scripts/trades-check.ts",
     "mcp:build": "esbuild mcp/server.ts --bundle --platform=node --format=esm --outfile=mcp/dist/server.mjs --log-level=warning --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
+    "agents:build": "node scripts/build-agents.mjs",
     "mcp": "node mcp/dist/server.mjs",
     "import-quhub": "node --experimental-strip-types --no-warnings scripts/import-quhub.ts",
     "payout": "esbuild scripts/payout.ts --bundle --platform=node --format=esm --outfile=.cache/payout.mjs --log-level=warning --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\" && node --env-file-if-exists=.env .cache/payout.mjs",

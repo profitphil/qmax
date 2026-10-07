@@ -2,6 +2,8 @@ node_modules
 web/dist
 mcp/dist
 sdk/dist
+web/public/agents/qmax-*
+web/public/agents/SHA256SUMS
 .env
 .cache
 .claude

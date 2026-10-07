@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QMax for AI agents: MCP server and SDK</title>
+    <meta name="description" content="Download the QMax MCP server and TypeScript SDK: quotes, order books, candles and arbitrage for Qubic's QX and QSwap, trade plans an agent signs itself, and x402 payment rails. Free API." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://qmax.exchange/agents/" />
+    <meta name="theme-color" content="#070a0f" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="QMax" />
+    <meta property="og:url" content="https://qmax.exchange/agents/" />
+    <meta property="og:title" content="QMax for AI agents: MCP server and SDK" />
+    <meta property="og:description" content="The QMax MCP server and TypeScript SDK for Qubic trading agents, with x402 payment rails." />
+    <meta property="og:image" content="https://qmax.exchange/brand/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="QMax for AI agents (llms.txt)" />
+    <link rel="service-desc" type="application/json" href="/api/v1/openapi.json" title="QMax API (OpenAPI)" />
+    <style>
+      :root { color-scheme: dark; --bg: #070a0f; --panel: #0e141c; --line: #1c2633; --fg: #e6ebf2; --muted: #93a1b4; --accent: #78aae6; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      main { max-width: 780px; margin: 0 auto; padding: 32px 16px 64px; }
+      h1 { font-size: 26px; margin: 0 0 6px; }
+      h2 { font-size: 18px; margin: 36px 0 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+      p, li { color: var(--muted); }
+      p strong, li strong, b { color: var(--fg); }
+      a { color: var(--accent); }
+      code, pre { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
+      pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; color: var(--fg); margin: 10px 0; }
+      pre code { background: none; border: 0; padding: 0; }
+      .lead { font-size: 16px; }
+      .warn { border-left: 3px solid #d29a3a; padding: 4px 12px; background: #1a1509; color: #e3c88f; }
+      nav a { margin-right: 14px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; }
+      td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+      th { color: var(--fg); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav><a href="/">QMax</a> <a href="/llms.txt">llms.txt</a> <a href="/api/v1/openapi.json">OpenAPI</a> <a href="/api/v1/plans">Plans</a></nav>
+      <h1>QMax for AI agents</h1>
+      <p class="lead">
+        QMax finds the best price for a trade on Qubic by comparing the QX order book with the QSwap pool and splitting an order across both. Its API is free. These two downloads put it in
+        an agent's hands: an <strong>MCP server</strong> for any MCP client, and a <strong>TypeScript SDK</strong> for your own code. Neither holds anyone's keys, and QMax never trades for you:
+        an agent signs its own trades, inside limits it sets.
+      </p>
+
+      <h2>MCP server</h2>
+      <p>One file, run with Node 22 or newer. It talks to <code>https://qmax.exchange/api</code> unless you set <code>QMAX_API_URL</code>.</p>
+      <pre><code>curl -O https://qmax.exchange/agents/qmax-mcp.mjs
+node qmax-mcp.mjs        # speaks MCP on stdio</code></pre>
+      <p>Add it to an MCP client, for example Claude Desktop (<code>claude_desktop_config.json</code>) or Claude Code:</p>
+      <pre><code>{ "mcpServers": { "qmax": { "command": "node", "args": ["/path/to/qmax-mcp.mjs"] } } }</code></pre>
+      <p>
+        It offers tools for: assets, quotes across QX and QSwap, order books, candles, price history, arbitrage checks, pools, asset health, the live trade tape, wallet ledgers, backtests and
+        <strong>unsigned</strong> trade plans (<code>qmax_build_plan</code>). Every tool is read-only: none signs or sends anything.
+      </p>
+      <table>
+        <tr><th>Setting</th><th>What it does</th></tr>
+        <tr><td><code>QMAX_API_URL</code></td><td>Where the QMax API is. Default: <code>https://qmax.exchange/api</code>.</td></tr>
+        <tr><td><code>QMAX_API_KEY</code></td><td>A prepaid QMax key, if you have one. Pays for Max plans from its balance.</td></tr>
+        <tr><td><code>QMAX_AGENT_SEED</code></td><td>Optional. Lets the server buy an x402 session when a call needs paying (a Max plan). <strong>This spends real QU</strong> from that wallet.</td></tr>
+        <tr><td><code>QMAX_MAX_SPEND_QU</code></td><td>The most QU the server will ever pay for sessions. Default 30,000.</td></tr>
+      </table>
+      <p class="warn">
+        One tool costs money: <code>qmax_best_position</code> (Max, the best position for a trade) is <strong>100 QU per plan</strong>, from a prepaid key's balance or free inside an x402 session. Everything
+        else is free. If you set <code>QMAX_AGENT_SEED</code>, use a wallet that holds only what the agent may spend, and keep the seed in the environment, never in a file or a chat.
+      </p>
+
+      <h2>TypeScript SDK</h2>
+      <p>An npm package (types included), served from this site. It is also available as one neutral ES module file, <a href="/agents/qmax-sdk.js">qmax-sdk.js</a>, for any runtime.</p>
+      <pre><code>npm install https://qmax.exchange/agents/qmax-sdk.tgz</code></pre>
+      <pre><code>import { QMaxClient } from "@qmax/sdk";
+
+const qmax = new QMaxClient({ baseUrl: "https://qmax.exchange/api" });
+const quote = await qmax.quote({ side: "buy", asset: "QDOGE", qty: 1_000_000 });
+quote.route;   // the cheapest way to fill it across QX and QSwap, each leg with its limits</code></pre>
+      <p>
+        For an agent that trades, <code>@qmax/sdk/agent</code> (Node only) quotes, checks the plan against limits <em>you</em> set (<code>maxOutlayQu</code> is required), signs with the agent's own
+        seed and sends each step; it can only call QX and QSwap, and its x402 payer can only pay QPayhub. The package's README has the full example.
+      </p>
+
+      <h2>Check what you downloaded</h2>
+      <pre><code>curl -O https://qmax.exchange/agents/SHA256SUMS
+shasum -a 256 -c SHA256SUMS</code></pre>
+      <p><a href="/agents/SHA256SUMS">SHA256SUMS</a> lists the hash of each file here. Run a file you downloaded only if its hash matches.</p>
+
+      <h2>How the payment works</h2>
+      <p>
+        QMax follows Q+Pay's x402 format (network <code>qubic:mainnet</code>, settled through QPayhub). A request that needs paying is answered with a <code>402</code> that names the price and the exact
+        payment; a client pays and repeats the request. <a href="/api/v1/x402">The offer</a> is public. QPayhub keeps at least 100 QU of every payment, so a payment per call is not offered: prepay a key
+        (a top-up of 10,000 QU buys 100 Max plans) or buy a session. The details, with the live prices, are in <a href="/llms.txt">/llms.txt</a>.
+      </p>
+    </main>
+  </body>
+</html>

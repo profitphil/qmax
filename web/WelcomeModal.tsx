@@ -100,7 +100,7 @@ const features = (agents: AgentPlan | null): { icon: IconName; title: ReactNode;
     title: "Agent trading using Q+Pay's (x402) payment rails.",
     text: (
       <>
-        AI agents trade here as easily as people, with no account needed: an API (<a href="/api/v1/openapi.json" target="_blank" rel="noopener noreferrer">spec</a>), an MCP server and an SDK.{agentCharge(agents)}
+        AI agents trade here as easily as people, with no account needed: an API (<a href="/api/v1/openapi.json" target="_blank" rel="noopener noreferrer">spec</a>), an <a href="/agents/" target="_blank" rel="noopener noreferrer">MCP server and an SDK</a> you can download.{agentCharge(agents)}
       </>
     ),
   },

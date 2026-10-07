@@ -9,7 +9,7 @@ import type { QMaxApi } from "./tools.ts";
 /**
  * QMax as an MCP server (stdio): market data, quotes, routing, candles, pools, backtests and unsigned trade plans for AI agents.
  *
- *   QMAX_API_URL       where the QMax API is (default http://localhost:8787)
+ *   QMAX_API_URL       where the QMax API is (default http://localhost:8787; the copy hosted at qmax.exchange/agents is built to default to https://qmax.exchange/api)
  *   QMAX_API_KEY       a prepaid QMax key, if you have one
  *   QMAX_AGENT_SEED    optional: lets this server buy an x402 session when a call needs paying (a Max plan, or the free allowance running out on a server that bills). Paying spends REAL QU from
  *                      that wallet, so use a wallet that holds only what you are happy to spend, and cap it with QMAX_MAX_SPEND_QU.
@@ -17,6 +17,9 @@ import type { QMaxApi } from "./tools.ts";
  *
  * No tool signs or sends a trade. `qmax_build_plan` returns unsigned steps for the caller's own wallet.
  */
+
+/** Set when the file is built for hosting (`npm run agents:build`): the API a downloaded copy talks to when QMAX_API_URL is not given. */
+declare const QMAX_DEFAULT_API: string | undefined;
 
 export function createServer(api: QMaxApi): McpServer {
   const server = new McpServer({ name: "qmax-mcp-server", version: "1.0.0" });
@@ -45,7 +48,7 @@ export function createServer(api: QMaxApi): McpServer {
 
 /** Builds the API client from the environment, with automatic x402 payment only if a seed was given. */
 export async function clientFromEnv(env: Record<string, string | undefined> = process.env): Promise<QMaxClient> {
-  const baseUrl = env.QMAX_API_URL ?? "http://localhost:8787";
+  const baseUrl = env.QMAX_API_URL ?? (typeof QMAX_DEFAULT_API === "string" ? QMAX_DEFAULT_API : "http://localhost:8787");
   let fetchFn: typeof fetch | undefined;
   if (env.QMAX_AGENT_SEED) {
     const { contractPayer, seedSigner } = await import("../sdk/agent.ts");
@@ -60,8 +63,8 @@ export async function clientFromEnv(env: Record<string, string | undefined> = pr
   return new QMaxClient({ baseUrl, ...(env.QMAX_API_KEY ? { apiKey: env.QMAX_API_KEY } : {}), ...(fetchFn ? { fetch: fetchFn } : {}) });
 }
 
-// Run only when started directly, not when a test imports createServer.
-if (process.argv[1] && /server\.(ts|mjs|js)$/.test(process.argv[1]) && !process.env.QMAX_MCP_NO_START) {
+// Run only when started directly (as server.ts, the built mcp/dist/server.mjs, or the hosted qmax-mcp.mjs), not when a test imports createServer.
+if (process.argv[1] && /(server|qmax-mcp)\.(ts|mjs|js)$/.test(process.argv[1]) && !process.env.QMAX_MCP_NO_START) {
   const client = await clientFromEnv();
   await createServer(client).connect(new StdioServerTransport());
   console.error("[qmax-mcp] ready on stdio");

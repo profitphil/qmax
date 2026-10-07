@@ -4,6 +4,15 @@ QMax for AI agents: market data, quotes, routing, candles, pools, backtests and 
 
 No tool signs or sends anything. `qmax_build_plan` returns the transactions a quote needs, in order, for the caller's own wallet to sign (or for `@qmax/sdk/agent`, which has spending limits built in). Every tool is marked read-only.
 
+## Get it (hosted)
+The built server is one file, hosted on the site with its checksum: see [qmax.exchange/agents](https://qmax.exchange/agents/).
+```bash
+curl -O https://qmax.exchange/agents/qmax-mcp.mjs
+curl -O https://qmax.exchange/agents/SHA256SUMS && shasum -a 256 -c SHA256SUMS   # check it first
+node qmax-mcp.mjs      # needs Node 22 or newer; talks to https://qmax.exchange/api unless QMAX_API_URL is set
+```
+`npm run agents:build` makes these files (`scripts/build-agents.mjs`: the server is built with the live API as its default address, the SDK is packed, the checksums are written) into `web/public/agents/`, and `deploy/deploy.sh` runs it before building the site.
+
 ## Run it
 ```bash
 npm run mcp:build        # bundles mcp/dist/server.mjs (one file, no node_modules needed)

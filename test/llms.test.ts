@@ -33,6 +33,18 @@ test("with a Max price it states the price and both ways to pay, from the same s
   assert.doesNotMatch(t, /qmax\.exchange/, "nothing of the default address is left over");
 });
 
+test("it tells an agent where to download the MCP server and the SDK, from the site's own address", () => {
+  const t = llmsText({});
+  assert.match(t, /\[MCP server\]\(https:\/\/qmax\.exchange\/agents\/qmax-mcp\.mjs\)/);
+  assert.match(t, /\[TypeScript SDK\]\(https:\/\/qmax\.exchange\/agents\/qmax-sdk\.tgz\)/);
+  assert.match(t, /npm install https:\/\/qmax\.exchange\/agents\/qmax-sdk\.tgz/);
+  assert.match(t, /\[SHA256SUMS\]\(https:\/\/qmax\.exchange\/agents\/SHA256SUMS\)/);
+  assert.doesNotMatch(t, /qmax_best_position/, "free Max: nothing to warn about");
+  const priced = llmsText({ PUBLIC_BASE_URL: "https://example.org/api", API_MAX_PRICE_QU: "100" });
+  assert.match(priced, /\[MCP server\]\(https:\/\/example\.org\/agents\/qmax-mcp\.mjs\)/, "the site is the API's address without /api");
+  assert.match(priced, /`qmax_best_position` \(Max\), which costs 100 QU a plan/);
+});
+
 test("with x402 off it does not offer a session", () => {
   const t = llmsText({ API_MAX_PRICE_QU: "100", API_X402: "off" });
   assert.doesNotMatch(t, /An x402 session/);
