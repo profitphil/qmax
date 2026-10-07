@@ -1,0 +1,8 @@
+.menu-member { display: grid; gap: 8px; margin: 4px 6px 8px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--accent-soft); }
+.menu-member-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--fg); }
+.menu-member-head .icon { color: var(--accent); flex: none; }
+.menu-member-head span { color: var(--muted); }
+.menu-member-share { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: 12.5px; }
+.menu-member-share dt { color: var(--fg-2); }
+.menu-member-share dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.menu-member-share dd.owed { color: var(--accent); }

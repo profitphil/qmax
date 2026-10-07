@@ -1,0 +1,137 @@
+/* The price chart (TradingView Lightweight Charts). The library draws into a canvas that fills .lwchart. */
+
+/* How tall the price part of the chart is: most of the window (the dialog is nearly full height), with a slice more for each oscillator pane. */
+.chartview { --chart-h: clamp(380px, calc(100dvh - 360px), 880px); --chart-h-small: 300px; }
+.chartview.focus { --chart-h: clamp(420px, calc(100dvh - 300px), 980px); }
+.lwchart-wrap { position: relative; margin: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface); outline: none; }
+.lwchart { width: 100%; height: calc(var(--chart-h) + var(--lw-panes, 0) * 70px); }
+@media (max-width: 900px) { .lwchart { height: calc(var(--chart-h-small) + var(--lw-panes, 0) * 100px); } }
+/* The chart was measured to fill the room that is left (the chart view is `fit`): the oscillator panes share that height instead of adding to it, so the time axis is never pushed below the edge. */
+.chartview.fit .lwchart { height: var(--chart-h); }
+@media (max-width: 900px) { .chartview.fit .lwchart { height: calc(var(--chart-h-small) + var(--lw-panes, 0) * 100px); } }
+.lwchart.drawing { cursor: crosshair; touch-action: none; }
+
+/* What the pointer is over: a card over the top-left of the plot (the chart leaves room for it above the candles). */
+.lw-legend {
+  position: absolute; z-index: 3; top: 8px; left: 10px; max-width: calc(100% - 96px); pointer-events: none;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 12px; padding: 6px 10px; border-radius: 4px;
+  font-size: 12px; line-height: 1.4; color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+.lw-legend b { color: var(--fg); font-weight: 650; }
+.lw-legend .num { font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.lw-legend .lw-ind { display: inline-flex; align-items: center; gap: 5px; }
+.lw-legend .lw-ind i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* ---- the panel around the chart: pickers, options, drawing tools ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.chartview .chartbar { margin-top: 0; }
+.chartpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.mini-select select { padding: 5px 28px 5px 10px; font-size: 12.5px; font-weight: 500; border-radius: 4px; background-color: var(--surface-2); min-height: 0; width: auto; }
+.chartopts { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; margin: 8px 0; }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tools.right { margin-left: auto; justify-content: flex-end; gap: 4px; }
+.sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.tool { --btn-bg: transparent; --btn-fg: var(--fg-2); border: 1px solid transparent; border-radius: 4px; padding: 0; width: 34px; height: 32px; display: inline-grid; place-items: center; }
+.tool:hover:not(:disabled) { --btn-bg: var(--surface-3); filter: none; }
+.tool.on { --btn-bg: var(--accent-soft); --btn-fg: var(--accent); border-color: var(--accent-line); }
+.tool:disabled { opacity: 0.4; cursor: not-allowed; }
+.tool:focus-visible, .swatch:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatches { display: flex; gap: 5px; align-items: center; padding: 0 2px; }
+.swatch { width: 16px; height: 16px; min-width: 16px; padding: 0; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line-strong); }
+.swatch.on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--fg); }
+.swatch.big { width: 24px; height: 24px; min-width: 24px; }
+.color-open .swatch { pointer-events: none; }
+.note.tip { color: var(--accent); margin: 0 0 6px; }
+.note.fine { font-size: 11.5px; opacity: 0.8; }
+
+/* The chart with its tool strip down the left, as on a trading terminal. */
+.stage { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; align-items: start; }
+.stagecol { min-width: 0; }
+/* No drawing tools (the line chart has none): the chart is the only column, not squeezed into the width the tools would have had. */
+.stage.solo, .stage.compact.solo { grid-template-columns: minmax(0, 1fr); }
+.drawbar { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); position: sticky; top: 0; }
+.drawbar .tool { width: 36px; height: 36px; }
+/* A short chart: the tools stay in one column, a little smaller, and the strip scrolls if it is still taller than the chart. */
+.stage.compact .drawbar { max-height: var(--chart-h, 320px); overflow-y: auto; scrollbar-width: none; padding: 4px; gap: 2px; }
+.stage.compact .drawbar::-webkit-scrollbar { display: none; }
+.stage.compact .drawbar .tool { width: 30px; height: 26px; }
+.drawbar .sep { width: 22px; height: 1px; margin: 4px 0; }
+.drawbar .ind-wrap { position: relative; }
+.drawbar .ind-menu { left: calc(100% + 10px); right: auto; top: 0; }
+
+/* Menus: indicators, drawing colour, picture size. */
+.ind-wrap { position: relative; }
+.ind-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 20; width: min(250px, calc(100vw - 24px)); max-height: 380px; overflow: auto; padding: 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 14px 36px rgb(0 0 0 / 0.32); }
+.ind-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 6px 6px 3px; }
+.ind-row { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+.ind-row:hover { background: var(--surface-2); }
+.ind-row input { width: auto; margin: 0; }
+.ind-row i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.ind-row small { margin-left: auto; color: var(--muted); font-size: 11px; }
+.ind-row.dim span { opacity: 0.6; }
+.ind-pin { --btn-bg: transparent; --btn-fg: var(--muted); margin-left: auto; width: 24px; height: 22px; padding: 0; border: 0; border-radius: 3px; }
+.ind-row small + .ind-pin { margin-left: 8px; }
+.ind-pin:hover:not(:disabled) { --btn-bg: var(--surface-3); --btn-fg: var(--fg); filter: none; }
+.ind-pin.on { --btn-fg: var(--tab, var(--accent)); }
+.ind-pin.on .icon { fill: currentColor; }
+.ind-hint { margin: 6px 6px 2px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.ind-clear { --btn-bg: transparent; --btn-fg: var(--muted); width: 100%; margin-top: 6px; font-size: 12.5px; padding: 6px; border: 1px solid var(--line); border-radius: 4px; }
+.tools.right .ind-menu { left: auto; right: 0; }
+.ind-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; }
+.ind-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.color-menu { width: 214px; }
+.color-menu .swatches { gap: 8px; padding: 6px; flex-wrap: wrap; }
+.shot-menu { width: 230px; }
+.shot-row { --btn-bg: transparent; --btn-fg: var(--fg); display: flex; justify-content: space-between; align-items: baseline; gap: 10px; width: 100%; padding: 8px 8px; border-radius: 4px; text-align: left; font-size: 13px; font-weight: 500; }
+.shot-row:hover { --btn-bg: var(--surface-2); filter: none; }
+.shot-row small { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+.shot-working { color: var(--accent); }
+
+.tools-toggle { display: none; margin-top: 8px; }
+
+/* Full screen: the whole panel, with the chart taking what is left. */
+.chartview.full { background: var(--bg, var(--surface)); padding: 14px 18px; overflow: auto; display: flex; flex-direction: column; }
+.chartview.full .stage { flex: 1; }
+
+@media (max-width: 900px) {
+  .stage { display: block; }
+  .drawbar { position: static; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; margin-bottom: 8px; padding: 6px; }
+  .drawbar .sep { width: 1px; height: 22px; margin: 0 4px; }
+  .drawbar .ind-menu { left: 0; top: calc(100% + 6px); }
+  .drawbar.collapsed, .chartopts.collapsed { display: none; }
+  .tools-toggle { display: inline-flex; }
+  .tools.right { margin-left: 0; justify-content: flex-start; }
+  .tool, .drawbar .tool { width: 38px; height: 38px; }
+  /* On a phone the legend is the date and the open, high, low and close only, so it does not cover the candles. */
+  .lw-legend { max-width: calc(100% - 20px); font-size: 11.5px; padding: 4px 8px; }
+  .lw-legend .vol, .lw-legend .lw-ind { display: none; }
+}
+
+/* The chart settings panel. */
+.style-menu { width: min(340px, calc(100vw - 24px)); max-height: min(72dvh, 600px); padding: 0; }
+.cs { display: grid; gap: 1px; padding: 6px 10px 10px; }
+.cs-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 2; margin: 0 -10px; padding: 8px 10px 6px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.cs-title { margin: 10px 0 2px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.cs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; font-size: 12.5px; color: var(--fg-2); cursor: pointer; }
+.cs-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.cs input[type="color"] { width: 34px; height: 22px; padding: 0; border: 1px solid var(--line-strong); border-radius: 3px; background: transparent; cursor: pointer; }
+.cs input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.cs-range { width: 120px; padding: 0; accent-color: var(--accent); }
+.cs-out { min-width: 36px; text-align: right; color: var(--muted); font-size: 12px; }
+.cs select { padding: 3px 24px 3px 8px; font-size: 12.5px; min-width: 130px; }
+.cs-auto { --btn-bg: transparent; --btn-fg: var(--muted); padding: 1px 6px; font-size: 11px; border: 1px solid var(--line); border-radius: 3px; }
+.cs-auto:hover:not(:disabled) { --btn-fg: var(--fg); filter: none; }
+.cs-note { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+
+/* The chart's buttons (fit, latest, settings, picture, full screen) float over the chart's top-right corner, clear of the price scale. */
+.stagecol { position: relative; }
+.stagecol > .tools.right.chart-actions { position: absolute; top: 6px; right: 66px; z-index: 6; margin: 0; padding: 2px; gap: 2px; flex-wrap: nowrap; background: color-mix(in srgb, var(--surface) 86%, transparent); border: 1px solid var(--line); border-radius: 3px; }
+/* a phone has too little room across the chart: there they stay a row of their own above it */
+@media (max-width: 720px) {
+  .stagecol > .tools.right.chart-actions { position: static; margin: 0 0 6px auto; width: fit-content; }
+}
+/* the legend wraps before the floating buttons instead of running under them */
+@media (min-width: 721px) {
+  .chart-actions ~ .lwchart-wrap .lw-legend { max-width: calc(100% - 262px); }
+}

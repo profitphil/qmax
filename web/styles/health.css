@@ -1,0 +1,84 @@
+/* Asset health: the A to E chip and the panel. Tokens only, so both themes follow; every class starts with health-. */
+
+/* ---------- The grade chip ---------- */
+.health-badge {
+  --c: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-width: 18px; height: 18px; padding: 0 5px; flex: none;
+  border-radius: 2px; border: 1px solid color-mix(in srgb, var(--c) 42%, transparent);
+  background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c);
+  font: 700 11px/1 var(--font); letter-spacing: 0; white-space: nowrap; vertical-align: middle; cursor: help;
+}
+button.health-badge { cursor: pointer; background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 42%, transparent); padding: 0 5px; font-weight: 700; font-size: 11px; }
+button.health-badge:hover:not(:disabled) { background: color-mix(in srgb, var(--c) 22%, transparent); filter: none; }
+.health-grade-A { --c: var(--ok); }
+.health-grade-B { --c: var(--accent); }
+.health-grade-C { --c: var(--warn); }
+.health-grade-D { --c: var(--sell); }
+/* E is the one that is filled in: the worst grade is the one that stands out in a long list */
+.health-grade-E, button.health-grade-E { --c: var(--err); background: var(--err); border-color: var(--err); color: var(--sell-ink); }
+button.health-grade-E:hover:not(:disabled) { background: var(--err); filter: brightness(1.08); }
+.health-badge.with-score { padding: 0 8px 0 7px; }
+.health-badge-score { font-weight: 600; font-size: 12px; padding-left: 6px; border-left: 1px solid color-mix(in srgb, currentColor 35%, transparent); }
+/* an estimate (some data was missing) has a dashed outline */
+.health-badge-partial { border-style: dashed; }
+.health-badge-none { font-weight: 500; background: transparent; border-style: dashed; cursor: default; }
+.health-badge-loading { width: 18px; padding: 0; border: 0; cursor: default; }
+
+/* ---------- The panel ---------- */
+.health-panel { display: grid; gap: 14px; min-width: 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.health-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.health-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.health-head-text { min-width: 0; flex: 1; }
+.health-big { flex: none; display: inline-flex; }
+.health-big .health-badge { min-width: 56px; height: 56px; font-size: 28px; border-radius: 4px; cursor: default; }
+.health-grade-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 17px; line-height: 1.3; }
+.health-grade-line strong { font-weight: 650; letter-spacing: -0.01em; }
+.health-grade-line .num { font-size: 14px; }
+.health-summary { margin: 3px 0 0; color: var(--fg-2); font-size: 14px; line-height: 1.45; }
+.health-partial { margin: 0; }
+.health-partial .icon { color: var(--warn); }
+
+.health-flags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.health-flag { padding: 6px 10px; border-radius: 3px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 1; cursor: help; }
+.health-flag.tone-bad { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); background: color-mix(in srgb, var(--err) 10%, transparent); }
+.health-flag.tone-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-soft); }
+.health-flag.tone-info { color: var(--muted); }
+
+.health-reasons { counter-reset: why; display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.health-reasons li { counter-increment: why; position: relative; padding-left: 28px; font-size: 14px; line-height: 1.5; color: var(--fg); overflow-wrap: anywhere; }
+.health-reasons li::before { content: counter(why); position: absolute; left: 0; top: 2px; width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-3); color: var(--fg-2); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.health-how { border-top: 1px solid var(--line); padding-top: 12px; }
+.health-how summary { display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--fg-2); }
+.health-how summary::-webkit-details-marker { display: none; }
+.health-how summary:hover { color: var(--fg); }
+.health-how summary .icon { transition: transform 0.15s var(--ease); }
+.health-how[open] summary .icon { transform: rotate(180deg); }
+.health-how-body { display: grid; gap: 10px; margin-top: 10px; font-size: 13.5px; line-height: 1.55; color: var(--fg-2); }
+.health-how-body p { margin: 0; }
+.health-how-head { margin: 4px 0 0; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.health-flag-help { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.health-flag-help b { color: var(--fg); font-weight: 600; }
+.health-metrics { display: grid; gap: 0; margin: 2px 0 0; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.health-metric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 8px 12px; background: var(--surface-2); font-size: 13px; }
+.health-metric + .health-metric { border-top: 1px solid var(--line); }
+.health-metric dt { color: var(--muted); }
+.health-metric dd { margin: 0; text-align: right; color: var(--fg); overflow-wrap: anywhere; }
+.health-asof { margin: 0; }
+
+/* ---------- Loading, error, empty ---------- */
+.health-skel { display: grid; gap: 12px; }
+.health-skel-badge { width: 56px; height: 56px; border-radius: 4px; flex: none; }
+.health-skel-chip { width: 96px; height: 26px; border-radius: 3px; }
+.health-state { display: grid; gap: 12px; justify-items: start; }
+.health-state .inline { margin: 0; }
+.health-empty { padding: 24px 8px; }
+
+/* ---------- Phones ---------- */
+@media (max-width: 520px) {
+  .health-panel { padding: 14px; }
+  .health-big .health-badge { min-width: 48px; height: 48px; font-size: 24px; border-radius: 4px; }
+  .health-metric { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .health-metric dd { text-align: left; }
+}

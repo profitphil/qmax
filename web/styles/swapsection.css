@@ -1,0 +1,67 @@
+/* The Swap section: give one token, get another */
+.swapsec { display: grid; gap: 16px; max-width: 640px; margin: 6px auto 0; }
+.swapsec-head h2 { font-size: 22px; letter-spacing: -0.02em; margin: 0 0 4px; }
+.swapsec-head .note { margin: 0; max-width: 60ch; }
+.swapsec-card { position: relative; display: grid; gap: 6px; padding: 14px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow); }
+.swapsec-field { display: grid; gap: 8px; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; }
+.swapsec-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; font-weight: 500; color: var(--fg-2); flex-wrap: wrap; }
+.swapsec-top small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.swapsec-row { display: flex; align-items: center; gap: 10px; }
+.swapsec-token { --btn-bg: var(--surface-3); --btn-fg: var(--fg); flex: none; gap: 8px; padding: 7px 10px 7px 8px; border: 1px solid var(--line-strong); border-radius: 3px; font-size: 15px; }
+.swapsec-token:hover:not(:disabled) { border-color: var(--accent-line); filter: none; }
+.swapsec-amount { flex: 1; min-width: 0; display: flex; align-items: center; }
+.swapsec-amount input { flex: 1; width: 100%; min-width: 0; background: transparent; border: 0; box-shadow: none; outline: none; text-align: right; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; padding: 6px 0; }
+.swapsec-amount input:focus { box-shadow: none; }
+.swapsec-amount .allbtn { margin: 0 0 0 10px; flex: none; }
+.swapsec-out { flex: 1; text-align: right; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; min-height: 40px; display: flex; align-items: center; justify-content: flex-end; }
+.swapsec-flip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; width: 36px; height: 36px; padding: 0; border-radius: 4px; --btn-bg: var(--surface); --btn-fg: var(--accent); border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+.swapsec-flip:hover:not(:disabled) { border-color: var(--accent-line); filter: none; }
+.swapsec-flip .icon { transform: rotate(90deg); }
+.swapsec-plan { display: grid; gap: 12px; }
+.swapsec-legs { list-style: none; margin: 0; padding: 14px 16px; display: grid; gap: 12px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.swapsec-legs li { display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: start; font-size: 14px; line-height: 1.4; }
+.swapsec-legs small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+.swapsec-step { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent); font-size: 12px; font-weight: 700; }
+.swapsec-meta { margin: 0; font-size: 13px; color: var(--fg-2); }
+.swapsec-meta b { color: var(--fg); }
+.swapsec-deal { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--accent-line); background: var(--surface-2); }
+.swapsec-deal-head { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 14px; line-height: 1.45; }
+.swapsec-deal-head .icon { color: var(--accent); margin-top: 3px; }
+.swapsec-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.swapsec-table th, .swapsec-table td { padding: 7px 6px; border-top: 1px solid var(--line); text-align: left; font-weight: 400; }
+.swapsec-table thead th { border-top: 0; color: var(--muted); font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
+.swapsec-table .r { text-align: right; }
+.swapsec-table tbody th { color: var(--fg-2); }
+.swapsec-table tr.us th, .swapsec-table tr.us td { color: var(--fg); font-weight: 600; background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+.swapsec-table tr.us th .icon { color: var(--ok); vertical-align: -0.15em; margin-right: 4px; }
+.swapsec-table tr.off th { color: var(--muted); }
+.swapsec-table .neg { color: var(--sell); }
+.swapsec-cta { display: grid; gap: 10px; }
+.swapsec-cta .trade-trust { padding: 0; align-items: flex-start; line-height: 1.45; }
+.swapsec-cta .trade-trust .icon { margin-top: 2px; flex: none; }
+.swapsec-search { display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 4px; color: var(--muted); }
+.swapsec-search input { flex: 1; min-width: 0; background: transparent; border: 0; box-shadow: none; padding: 11px 0; }
+.swapsec-search input:focus, .swapsec-search input:focus-visible { box-shadow: none; outline: none; }
+.swapsec-search:focus-within { border-color: var(--accent); color: var(--accent); }
+.swapsec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+/* One scroll area for the whole picker, with each section's name staying at the top while its rows pass under it. */
+.swapsec-scroll { max-height: min(52dvh, 420px); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 4px; align-content: start; }
+.swapsec-sec { position: sticky; top: 0; z-index: 1; margin: 0; padding: 6px 4px 4px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 6px; }
+.swapsec-kinds { align-self: start; width: 100%; }
+.swapsec-kinds button { flex: 1; justify-content: center; gap: 5px; }
+.swapsec-more { margin: 4px 4px 8px; font-size: 11.5px; }
+.swapsec-list button { --btn-bg: transparent; --btn-fg: var(--fg); width: 100%; justify-content: flex-start; gap: 12px; padding: 9px 10px; border-radius: 4px; font-weight: 400; text-align: left; }
+.swapsec-list button:hover:not(:disabled) { --btn-bg: var(--surface-2); filter: none; }
+.swapsec-list-name { display: grid; flex: 1; min-width: 0; line-height: 1.25; }
+.swapsec-list-name small { color: var(--muted); font-size: 12px; }
+.swapsec-list-price { color: var(--fg-2); font-size: 13px; }
+@media (max-width: 720px) {
+  .swapsec-amount input, .swapsec-out { font-size: 22px; }
+  .swapsec-card { padding: 10px; }
+}
+
+/* Swap | Max */
+.swapsec-head { display: grid; gap: 8px; }
+.swapsec-modes { justify-self: start; }
+.swapsec-modes button { display: inline-flex; align-items: center; gap: 4px; }
+.linklike { --btn-bg: transparent; --btn-fg: var(--accent); border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; display: inline; }

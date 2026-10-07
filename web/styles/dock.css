@@ -1,0 +1,45 @@
+/* The trades beside the order bar: a tab for this asset, a tab for every asset. Dense rows, tokens only. */
+.dock { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); overflow: hidden; }
+.dock-tabs { display: flex; flex: none; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.dock-tabs button { flex: 1 1 0; min-width: 0; justify-content: center; --btn-bg: transparent; --btn-fg: var(--muted); position: relative; border-radius: 0; padding: 4px 12px; font-size: 11.5px; font-weight: 500; border: 0; border-right: 1px solid var(--line); }
+.dock-tabs button:last-child { border-right: 0; }
+.dock-tabs button:hover:not(:disabled) { --btn-fg: var(--fg); filter: none; }
+.dock-tabs button.on { --btn-fg: var(--fg); --btn-bg: var(--bg); }
+.dock-tabs button.on::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--tab); }
+/* The body scrolls, header and rows together (the header sticks to the top), so a scrollbar takes the same width from both and the columns stay lined up. */
+.dock-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: thin; }
+.dock-cols, .dock-row { display: grid; grid-template-columns: 58px 40px minmax(0, 1fr) 54px 46px 46px 12px; align-items: center; column-gap: 6px; padding: 0 8px; }
+.dock-cols { flex: none; position: sticky; top: 0; z-index: 2; background: var(--bg); height: 20px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--line); }
+.dock-cols .r { text-align: right; }
+.dock-list { list-style: none; margin: 0; padding: 0; flex: none; }
+.dock-row { height: 22px; font-size: 11.5px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); white-space: nowrap; }
+.dock-row:hover { background: var(--surface-2); }
+.dock-row.new { animation: ticker-flash 2.6s ease-out; }
+.dock-time { color: var(--muted); }
+.dock-row.old { opacity: 0.92; }
+.dock-many { margin-left: 4px; color: var(--muted); font-size: 10.5px; }
+.dock-side { display: inline-flex; align-items: center; gap: 3px; }
+.dock-side.buy { color: var(--buy); }
+.dock-side.sell { color: var(--sell); }
+.dock-side.unknown { color: var(--muted); }
+.dock-amt { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dock-asset { --btn-bg: transparent; --btn-fg: var(--accent); padding: 0; border: 0; font-size: 11.5px; font-weight: 600; border-radius: 0; }
+.dock-asset:hover:not(:disabled) { text-decoration: underline; filter: none; }
+.dock-total, .dock-price { text-align: right; }
+.dock-venue { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-2); }
+.dock-link { color: var(--muted); display: inline-flex; }
+a.dock-link:hover { color: var(--fg); }
+.dock-status { margin: 0; padding: 8px; display: grid; gap: 6px; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .dock-row.new { animation: none; background-color: var(--accent-soft); } }
+
+/* The market a trade was on is part of Max: the column keeps its place, with the little X where the market would be */
+.dock-market-h { display: inline-flex; align-items: center; grid-column: 6 / span 2; white-space: nowrap; }
+button.dock-venue.locked, button.tape-venue.locked { --btn-bg: transparent; --btn-fg: var(--muted); border: 0; padding: 0; min-height: 0; height: auto; cursor: pointer; justify-content: flex-start; }
+button.dock-venue.locked:hover:not(:disabled), button.tape-venue.locked:hover:not(:disabled) { filter: none; opacity: 0.8; }
+
+/* the issuer part of a shared name (QTREAT.QDOGE): smaller and quieter, after the name */
+.asset-issuer { font-size: 0.8em; font-weight: 500; opacity: 0.7; }
+
+/* One asset's trades have no name beside the quantity, so the quantity sits against the price, as the other figures do */
+.dock-body.one-asset .dock-amt { justify-content: flex-end; }
+.dock-body.one-asset .dock-cols > span:nth-child(3) { text-align: right; }

@@ -1,0 +1,14 @@
+/* Savings: what QMax's routing is worth on an order, in the quote and on the receipt after a trade */
+.saving { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--accent-soft); border: 1px solid var(--accent-line); font-size: 13px; line-height: 1.45; }
+.saving > .icon { color: var(--accent); margin-top: 2px; }
+.saving > div { display: grid; gap: 4px; min-width: 0; }
+.saving b { font-weight: 600; }
+.saving-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.saving small { font-size: 11.5px; }
+.saving.receipt { background: var(--buy-soft); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.saving.receipt > .icon { color: var(--ok); }
+.saving-total { margin: 2px 0 0; color: var(--fg-2); }
+.saving .link { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; justify-self: start; }
+
+.menu-saved { display: flex; gap: 7px; align-items: flex-start; margin: 0 6px 6px; padding: 8px 10px; font-size: 12px; line-height: 1.4; color: var(--fg-2); background: var(--accent-soft); border-radius: var(--radius-sm); }
+.menu-saved .icon { color: var(--accent); margin-top: 2px; }

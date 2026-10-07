@@ -1,0 +1,115 @@
+/* Trade ledger, P&L and CSV export (web/LedgerPanel.tsx). Tokens only, so both themes follow. */
+
+.ledger { display: grid; gap: 14px; margin-top: 8px; min-width: 0; }
+.ledger-bar { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 20px; flex-wrap: wrap; }
+.ledger-heading h3 { font-size: 18px; letter-spacing: -0.015em; }
+.ledger-heading .note { margin-top: 2px; }
+.ledger-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ledger-export { padding: 7px 14px; font-size: 13.5px; white-space: nowrap; }
+.ledger-msg { margin: -4px 0 0; font-size: 13.5px; }
+
+.ledger-warn { margin: 0; align-items: flex-start; color: var(--fg-2); border-color: color-mix(in srgb, var(--warn) 42%, transparent); background: var(--warn-soft); line-height: 1.5; }
+.ledger-warn .icon { flex: none; color: var(--warn); margin-top: 2px; }
+
+/* summary cards */
+.ledger-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ledger-stats .stat { min-width: 0; }
+.ledger-stats .stat .skeleton.line.big { width: 70%; }
+.ledger-v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ledger-v.up, .ledger-pnl.up, .ledger-pnl small.up { color: var(--buy); }
+.ledger-v.down, .ledger-pnl.down, .ledger-pnl small.down { color: var(--sell); }
+
+.ledger-loading { display: grid; gap: 12px; }
+.ledger-loading .status-line { flex-wrap: nowrap; align-items: flex-start; }
+.ledger-loading .status-line .spinner { margin-top: 3px; }
+.ledger-loading .note { margin: -4px 0 0; }
+.ledger-skel { display: grid; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.ledger-skel .skeleton:nth-child(2n) { width: 82%; }
+
+.ledger-empty { padding: 28px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* tables (cards on phones) */
+.ledger-block { display: grid; gap: 8px; min-width: 0; }
+.ledger-block h4 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+.ledger-subbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.ledger-table { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.ledger-head, .ledger-row { display: grid; align-items: center; column-gap: 14px; padding: 0 16px; }
+.ledger-pos .ledger-head, .ledger-pos .ledger-row { grid-template-columns: minmax(170px, 1.7fr) repeat(4, minmax(90px, 1fr)); }
+.ledger-trades .ledger-head, .ledger-trades .ledger-row { grid-template-columns: 124px 56px minmax(130px, 1.4fr) minmax(80px, 1fr) minmax(84px, 1fr) minmax(130px, 1.25fr) 76px 28px; }
+.ledger-head { height: 36px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.ledger-row { min-height: 54px; padding-top: 9px; padding-bottom: 9px; border-bottom: 1px solid var(--line); font-size: 14px; transition: background 0.15s; }
+.ledger-row:last-child { border-bottom: 0; }
+.ledger-row:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.ledger-row > span { min-width: 0; }
+.ledger-row small { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); font-weight: 400; }
+.ledger-row .num { font-variant-numeric: tabular-nums; }
+
+.ledger-asset { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ledger-asset > span:last-child { min-width: 0; }
+.ledger-asset b { font-weight: 600; }
+.ledger-asset small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ledger-opnote { display: block; font-size: 13px; line-height: 1.4; }
+.ledger-c-date { font-size: 13px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+
+.ledger-side { display: inline-block; min-width: 44px; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 4px 6px; line-height: 1.2; }
+.ledger-side.buy { color: var(--buy); border-color: color-mix(in srgb, var(--buy) 45%, transparent); background: var(--buy-soft); }
+.ledger-side.sell { color: var(--sell); border-color: color-mix(in srgb, var(--sell) 45%, transparent); background: var(--sell-soft); }
+.ledger-side.move { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.ledger-side.other { color: var(--muted); border-color: var(--line-strong); background: var(--surface-2); }
+
+.ledger-venue { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--fg-2); }
+.ledger-venue .dot.other { background: var(--muted); }
+.ledger-c-link a { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 4px; color: var(--muted); }
+.ledger-c-link a:hover { color: var(--accent); background: var(--surface-2); text-decoration: none; }
+
+.ledger-more { justify-self: center; margin-top: 4px; }
+.ledger-excluded { margin: 0; }
+.ledger-disclaimer { display: flex; gap: 8px; align-items: flex-start; margin: 0; }
+.ledger-disclaimer .icon { flex: none; margin-top: 3px; }
+.ledger-disclaimer b { color: var(--fg-2); font-weight: 600; }
+.ledger-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+@media (max-width: 1040px) {
+  .ledger-trades .ledger-head, .ledger-trades .ledger-row { column-gap: 10px; grid-template-columns: 108px 52px minmax(110px, 1.3fr) minmax(70px, 1fr) minmax(76px, 1fr) minmax(116px, 1.2fr) 70px 28px; }
+}
+
+@media (max-width: 900px) {
+  .ledger-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Phones: every row becomes a card, each figure labelled. */
+@media (max-width: 720px) {
+  .ledger-bar { align-items: stretch; }
+  .ledger-actions { justify-content: space-between; width: 100%; }
+  .ledger-stats { gap: 8px; }
+  .ledger-stats .stat { padding: 12px 14px; }
+  .ledger-stats .stat-value { font-size: 19px; }
+  .ledger-head { display: none; }
+  .ledger-table { background: transparent; border: 0; box-shadow: none; overflow: visible; display: grid; gap: 10px; }
+  .ledger-row, .ledger-pos .ledger-row, .ledger-trades .ledger-row {
+    align-items: start; column-gap: 12px; row-gap: 10px; padding: 12px 14px; min-height: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .ledger-row:last-child { border-bottom: 1px solid var(--line); }
+  .ledger-row .r { text-align: left; }
+  .ledger-row [data-label]::before { content: attr(data-label); display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+
+  .ledger-pos .ledger-row { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "asset asset pnl" "held avg price"; }
+  .ledger-pos .ledger-c-pnl { text-align: right; }
+  .ledger-pos .ledger-c-held, .ledger-pos .ledger-c-avg, .ledger-pos .ledger-c-price { font-size: 13.5px; overflow-wrap: anywhere; }
+  .ledger-pos .ledger-c-asset { grid-area: asset; }
+  .ledger-pos .ledger-c-held { grid-area: held; }
+  .ledger-pos .ledger-c-avg { grid-area: avg; }
+  .ledger-pos .ledger-c-price { grid-area: price; }
+  .ledger-pos .ledger-c-pnl { grid-area: pnl; }
+
+  .ledger-trades .ledger-row { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) 28px; grid-template-areas: "side asset asset link" "qty qty price price" "net net venue venue" "date date date date"; align-items: center; }
+  .ledger-trades .ledger-c-side { grid-area: side; }
+  .ledger-trades .ledger-c-asset { grid-area: asset; }
+  .ledger-trades .ledger-c-link { grid-area: link; justify-self: end; }
+  .ledger-trades .ledger-c-qty { grid-area: qty; }
+  .ledger-trades .ledger-c-price { grid-area: price; }
+  .ledger-trades .ledger-c-net { grid-area: net; }
+  .ledger-trades .ledger-c-venue { grid-area: venue; }
+  .ledger-trades .ledger-c-date { grid-area: date; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+}

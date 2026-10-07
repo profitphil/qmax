@@ -1,0 +1,165 @@
+/* Liquidity pools: ranked table on desktop, cards on phones. Tokens only, so both themes follow. */
+
+.pools { display: grid; gap: 14px; }
+.pools-head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+.pools-head h2 { font-size: 22px; letter-spacing: -0.02em; margin: 0 0 4px; }
+.pools-head .note { margin: 0; max-width: 62ch; }
+.pools-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.pools-caveat { margin: 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg-2); align-items: center; }
+.pools-caveat .icon { color: var(--accent); margin-top: 0; }
+
+/* ---------- table ---------- */
+.pools-table { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; transition: opacity 0.2s; }
+.pools-table.loading { opacity: 0.6; }
+.pools-cols, .pools-row {
+  display: grid; align-items: center; column-gap: 16px;
+  grid-template-columns: 30px minmax(170px, 1.7fr) minmax(104px, 1fr) minmax(96px, 1fr) minmax(96px, 1fr) minmax(150px, 1.4fr) 88px 80px;
+  padding: 0 18px 0 14px;
+}
+.pools-cols { height: 38px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.pools-cols .r { text-align: right; }
+.pools-list { list-style: none; margin: 0; padding: 0; }
+.pools-item { border-bottom: 1px solid var(--line); }
+.pools-item:last-child { border-bottom: 0; }
+.pools-item.open { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+
+/* The row is one button, so it is focusable and announced as expandable. */
+.pools-row {
+  --btn-bg: transparent; --btn-fg: var(--fg);
+  width: 100%; min-height: 66px; padding-top: 10px; padding-bottom: 10px; border: 0; border-radius: 0;
+  text-align: left; font-weight: 400; cursor: pointer; transition: background 0.15s;
+}
+.pools-row:hover:not(.skel) { background: color-mix(in srgb, var(--surface-2) 70%, transparent); filter: none; }
+.pools-row.skel { pointer-events: none; }
+.pools-row:active:not(.skel) { transform: none; }
+.pools-row:focus-visible { outline-offset: -2px; border-radius: var(--radius-sm); }
+.pools-rank { color: var(--muted); font-size: 13px; font-weight: 600; }
+.pools-pool { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pools-names { display: grid; gap: 2px; min-width: 0; }
+.pools-symbol { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.pools-symbol strong { font-weight: 650; font-size: 15.5px; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pools-sub { font-size: 12px; color: var(--muted); min-width: 0; }
+.pools-pill { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-soft); border-radius: 3px; padding: 0 8px; font-size: 11px; font-weight: 500; line-height: 17px; cursor: help; }
+.pools-flag { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 50%; cursor: help; }
+.pools-chev { margin-left: auto; color: var(--muted); transition: transform 0.2s var(--ease); }
+.pools-item.open .pools-chev { transform: rotate(180deg); color: var(--fg); }
+
+.pools-cell { min-width: 0; font-size: 14px; display: grid; }
+.pools-cell.r { text-align: right; }
+.pools-cell small { color: var(--muted); font-size: 11px; font-weight: 500; }
+.pools-label { display: none; font-size: 11px; font-weight: 500; letter-spacing: 0.02em; color: var(--muted); }
+.pools-tone.up { color: var(--buy); }
+.pools-tone.down { color: var(--sell); }
+.pools-tone.mid { color: var(--warn); }
+
+.pools-apr { display: flex; align-items: center; gap: 10px; }
+.pools-aprnum { min-width: 62px; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.pools-bar { position: relative; flex: 1; height: 6px; min-width: 40px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+.pools-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--accent); }
+/* a flagged pool's bar is hatched: its APR is shown, but not vouched for */
+.pools-bar.low i { background: repeating-linear-gradient(135deg, var(--warn) 0 4px, transparent 4px 8px); }
+
+.pools-divider { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 18px; font-size: 12.5px; line-height: 1.45; color: var(--muted); background: var(--warn-soft); border-top: 1px solid var(--line); }
+.pools-divider .icon { margin-top: 1px; color: var(--warn); }
+
+/* ---------- detail ---------- */
+.pools-detail { display: grid; gap: 14px; padding: 4px 18px 18px 56px; }
+.pools-dhead { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.pools-dhead h3 { font-size: 16px; }
+.pools-detail h4 { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--fg-2); margin: 0 0 8px; }
+.pools-cols2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 22px 28px; align-items: start; }
+.pools-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pools-note { display: flex; gap: 9px; align-items: flex-start; padding: 8px 12px; font-size: 13px; line-height: 1.45; color: var(--fg-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.pools-note .icon { margin-top: 1.5px; color: var(--muted); }
+.pools-note.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.pools-note.warn .icon { color: var(--warn); }
+.pools-explain { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 10px; font-size: 14px; line-height: 1.55; color: var(--fg-2); }
+.pools-explain b { color: var(--fg); font-weight: 600; }
+
+.pools-split { display: flex; height: 10px; border-radius: 4px; overflow: hidden; gap: 2px; margin: 4px 0 10px; }
+.pools-seg { display: block; min-width: 4px; border-radius: 3px; }
+.pools-seg.s0 { background: var(--accent); }
+.pools-seg.s1 { background: var(--violet); }
+.pools-seg.s2 { background: var(--accent-2); }
+.pools-seg.s3 { background: var(--warn); }
+.pools-seg.s4 { background: var(--sell); }
+.pools-legend { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--fg-2); }
+.pools-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.pools-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* ---------- calculator ---------- */
+.pools-calc { display: grid; gap: 10px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.pools-calc h4 { margin: 0; }
+.pools-calc .field small.err { color: var(--err); }
+.pools-calc .inputwrap input { font-size: 18px; padding: 10px 4px 10px 14px; }
+.pools-presets .chip { font-variant-numeric: tabular-nums; }
+.pools-est { display: grid; gap: 8px; transition: opacity 0.2s; }
+.pools-est.stale { opacity: 0.55; }
+.pools-est .note { margin: 0; }
+.pools-skel { height: 190px; margin: 4px 0; }
+.pools-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pools-stats .stat { padding: 11px 12px; box-shadow: none; background: var(--surface-2); }
+.pools-stats .stat-value { font-size: 18px; }
+
+.pools-iltable { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 4px; }
+.pools-iltable caption { caption-side: top; text-align: left; font-size: 12px; color: var(--muted); padding-bottom: 6px; }
+.pools-iltable th, .pools-iltable td { padding: 6px 4px; border-top: 1px solid var(--line); font-weight: 500; text-align: left; }
+.pools-iltable thead th { border-top: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.pools-iltable .r { text-align: right; }
+.pools-iltable small { color: var(--muted); font-size: 11px; }
+.pools-foot { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+
+@media (max-width: 1040px) {
+  .pools-cols, .pools-row { grid-template-columns: 26px minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(120px, 1.2fr) 74px 66px; column-gap: 10px; }
+  .pools-detail { padding-left: 18px; }
+  .pools-cols2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* phones: each pool is a card, with its numbers labelled */
+@media (max-width: 720px) {
+  .pools-head h2 { font-size: 20px; }
+  .pools-table { background: none; border: 0; box-shadow: none; border-radius: 0; overflow: visible; }
+  .pools-cols { display: none; }
+  .pools-list { display: grid; gap: 10px; }
+  .pools-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .pools-item:last-child { border-bottom: 1px solid var(--line); }
+  .pools-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; padding: 14px 14px 14px;
+    grid-template-areas:
+      "pool pool pool"
+      "lprice lprice price"
+      "tvl vol il"
+      "apr apr apr";
+  }
+  .pools-row { align-items: start; }
+  .pools-rank { display: none; }
+  .pools-pool { grid-area: pool; }
+  .pools-lprice { grid-area: lprice; }
+  .pools-lprice-v { font-size: 20px; }
+  .pools-tvl { grid-area: tvl; }
+  .pools-vol { grid-area: vol; }
+  .pools-aprcell { grid-area: apr; }
+  .pools-price { grid-area: price; }
+  .pools-il { grid-area: il; }
+  .pools-cell.r { text-align: left; }
+  .pools-cell { gap: 1px; }
+  .pools-label { display: block; }
+  .pools-cell small { margin-left: 2px; }
+  .pools-aprnum { font-size: 20px; min-width: 0; }
+  .pools-apr { gap: 12px; }
+  .pools-row.skel { grid-template-areas: none; grid-template-columns: 1fr; }
+  .pools-divider { border-radius: var(--radius-sm); border: 1px solid var(--line); padding: 10px 12px; }
+  .pools-detail { padding: 2px 14px 16px; }
+  .pools-stats { grid-template-columns: minmax(0, 1fr); }
+  .pools-stats .stat { grid-template-columns: 1fr auto; align-items: baseline; }
+  .pools-stats .stat-hint { grid-column: 1 / -1; display: block; }
+  .pools-calc { padding: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pools-chev, .pools-table, .pools-est { transition: none; }
+}
+
+.pools-lprice-v { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.pools-latest { font-size: 13px; color: var(--fg-2); }
+.pools-latest b { color: var(--fg); font-size: 16px; margin-left: 4px; }

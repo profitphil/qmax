@@ -1,0 +1,9 @@
+node_modules
+web/dist
+mcp/dist
+sdk/dist
+.env
+.cache
+.claude
+.DS_Store
+*.log

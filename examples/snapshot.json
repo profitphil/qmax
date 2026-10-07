@@ -1,0 +1,26 @@
+{
+  "asset": "DEMO",
+  "qx": {
+    "buyerFeeRate": 0,
+    "sellerFeeRate": 0.003,
+    "fixedCostQu": 100,
+    "asks": [
+      { "price": 100, "qty": 8000 },
+      { "price": 101, "qty": 15000 },
+      { "price": 103, "qty": 40000 },
+      { "price": 108, "qty": 30000 }
+    ],
+    "bids": [
+      { "price": 98, "qty": 8000 },
+      { "price": 97, "qty": 15000 },
+      { "price": 95, "qty": 40000 },
+      { "price": 90, "qty": 30000 }
+    ]
+  },
+  "qswap": {
+    "swapFeeRate": 30,
+    "fixedCostQu": 100100,
+    "reserveQu": 20000000,
+    "reserveAsset": 190000
+  }
+}

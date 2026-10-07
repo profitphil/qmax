@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>QMax: the best route for your Qubic trades</title>
+    <meta name="description" content="Best price on Qubic: QMax splits every order across the QX order book and the QSwap pool. Free and non-custodial, with an API and x402 payment rails for AI agents." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://qmax.exchange/" />
+    <meta name="theme-color" content="#070a0f" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="QMax" />
+    <meta property="og:url" content="https://qmax.exchange/" />
+    <meta property="og:title" content="QMax: the best route for your Qubic trades" />
+    <meta property="og:description" content="Splits every order across the QX order book and the QSwap pool for the best price. Free, non-custodial, with an API and x402 rails for AI agents." />
+    <meta property="og:image" content="https://qmax.exchange/brand/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="QMax: the best route for your Qubic trades" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="QMax: the best route for your Qubic trades" />
+    <meta name="twitter:description" content="Splits every order across QX and QSwap for the best price. Free, non-custodial, with an API and x402 rails for AI agents." />
+    <meta name="twitter:image" content="https://qmax.exchange/brand/og.png" />
+    <!-- For agents and the crawlers behind them: what QMax is in plain Markdown, and the API's OpenAPI document. -->
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="QMax for AI agents (llms.txt)" />
+    <link rel="service-desc" type="application/json" href="/api/v1/openapi.json" title="QMax API (OpenAPI)" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://qmax.exchange/#site",
+            "url": "https://qmax.exchange/",
+            "name": "QMax",
+            "description": "The best route for your Qubic trades: a liquidity router across the QX order book and the QSwap pool."
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://qmax.exchange/#app",
+            "name": "QMax",
+            "url": "https://qmax.exchange/",
+            "applicationCategory": "FinanceApplication",
+            "operatingSystem": "Any (web browser)",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "description": "A non-custodial trading terminal and liquidity router for Qubic. It compares the QX order book with the QSwap pool and splits an order across both for the best price. Every trade is signed in the user's own wallet.",
+            "featureList": [
+              "Best price across QX and QSwap, with orders split across both",
+              "Live candles, indicators and drawing tools for every asset",
+              "Swap QU for tokens, and any asset for any asset with Max",
+              "Portfolio with what holdings would really fetch if sold now",
+              "QSwap pools ranked by the fees they earn",
+              "HTTP API, x402 payment rails and a Discord bot"
+            ]
+          },
+          {
+            "@type": "WebAPI",
+            "@id": "https://qmax.exchange/#api",
+            "name": "QMax API",
+            "url": "https://qmax.exchange/api/v1/openapi.json",
+            "documentation": "https://qmax.exchange/llms.txt",
+            "provider": { "@id": "https://qmax.exchange/#site" },
+            "description": "Quotes, order books, candles, arbitrage checks and more for Qubic's QX and QSwap markets. Free; Max plans for agents are paid by x402 (Q+Pay payment rails) or a prepaid key."
+          }
+        ]
+      }
+    </script>
+    <!-- The X mark. The ?v= keeps a browser from showing the icon it remembered from before (tab icons are cached for a long time): raise it when the icon changes. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
+    <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=3" />
+    <script src="/theme-init.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Without JavaScript (most crawlers and agents' fetchers) this is the page. -->
+    <noscript>
+      <h1>QMax: the best route for your Qubic trades</h1>
+      <p>QMax is a non-custodial trading terminal and liquidity router for Qubic. It compares the QX order book with the QSwap pool and splits your order across both for the best price. It is free, and every trade is signed in your own wallet. It needs JavaScript to run.</p>
+      <ul>
+        <li>Charts with live candles, indicators and drawing tools for every asset on QX and QSwap.</li>
+        <li>Swap QU for tokens, a portfolio, QSwap pools ranked by the fees they earn, and a Discord bot.</li>
+        <li>For AI agents: an HTTP API with an <a href="/api/v1/openapi.json">OpenAPI document</a>, x402 payment rails (Q+Pay, settled through QPayhub) and a plain-text guide at <a href="/llms.txt">/llms.txt</a>.</li>
+      </ul>
+    </noscript>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

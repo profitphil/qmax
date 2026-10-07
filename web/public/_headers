@@ -1,0 +1,9 @@
+# Security headers for hosts that read a _headers file (Netlify, Cloudflare Pages). For any other host, send the same headers
+# (nginx: add_header ... always;). The Content-Security-Policy must match `CSP` in vite.config.ts. If the QMax API is served from a
+# different origin than the site, add it to connect-src.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://rpc.qubic.org https://relay.walletconnect.org wss://relay.walletconnect.org https://rpc.walletconnect.org https://verify.walletconnect.org https://verify.walletconnect.com https://pulse.walletconnect.org https://echo.walletconnect.com; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'

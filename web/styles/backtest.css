@@ -1,0 +1,80 @@
+/* Backtest: the form, the result and the trades list. Tokens only, so both themes follow. */
+
+.backtest { display: grid; gap: 14px; margin-top: 6px; min-width: 0; }
+
+/* ---------- form ---------- */
+.backtest-form { display: grid; gap: 14px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.backtest-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.backtest-field { display: grid; gap: 5px; align-content: start; min-width: 0; font-size: 12.5px; font-weight: 500; color: var(--fg-2); }
+.backtest-field input, .backtest-field select, .backtest-venue select { width: 100%; box-sizing: border-box; font-size: 14px; font-variant-numeric: tabular-nums; }
+.backtest-field small { font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--muted); }
+.backtest-quick { margin-top: 2px; }
+.backtest-quick .chip { padding: 3px 10px; font-size: 12px; }
+.backtest-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; }
+.backtest-venue { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; }
+.backtest-venue select { width: auto; max-width: 100%; padding: 6px 10px; }
+.backtest-errors { margin: 0; padding: 0 0 0 18px; font-size: 13px; line-height: 1.5; }
+.backtest-actions { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+.backtest-actions button { flex: none; }
+.backtest-rule { flex: 1 1 220px; margin: 0; font-size: 12px; }
+.backtest-hint { margin: 0; }
+.backtest-running { display: grid; gap: 4px; }
+
+/* ---------- result ---------- */
+.backtest-result { display: grid; gap: 14px; min-width: 0; }
+.backtest-summary { margin: 0; padding: 12px 14px; font-size: 14.5px; line-height: 1.55; color: var(--fg); background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius-sm); text-wrap: pretty; }
+.backtest-chart svg { display: block; width: 100%; height: auto; max-width: 100%; }
+.backtest-result > .note { margin: -6px 0 0; }
+
+.backtest-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.backtest-stats .stat { min-width: 0; padding: 12px 14px; align-content: start; }
+.backtest-stats .stat-label { font-size: 12px; }
+.backtest-stats .stat-value { font-size: 18px; overflow-wrap: anywhere; }
+.backtest-stats .stat-hint { display: block; line-height: 1.35; }
+.backtest-stats .stat-value.good { color: var(--buy); }
+.backtest-stats .stat-value.bad { color: var(--sell); }
+
+/* the caveats get as much room as the numbers: they are part of the answer */
+.backtest-warnings { padding: 12px 14px; background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: var(--radius-sm); }
+.backtest-warnings h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; color: var(--warn); }
+.backtest-warnings ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.backtest-warnings li { position: relative; padding-left: 14px; font-size: 13.5px; line-height: 1.5; color: var(--fg-2); text-wrap: pretty; }
+.backtest-warnings li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
+
+/* ---------- trades ---------- */
+.backtest-trades { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.backtest-trades summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; cursor: pointer; font-size: 14px; font-weight: 600; list-style: none; }
+.backtest-trades summary::-webkit-details-marker { display: none; }
+.backtest-trades summary .icon { color: var(--muted); transition: transform 0.15s; }
+.backtest-trades[open] summary .icon { transform: rotate(180deg); }
+.backtest-trades > .note { margin: 0; padding: 0 14px 12px; }
+.backtest-table { max-height: 360px; overflow: auto; border-top: 1px solid var(--line); }
+.backtest-table > .note { margin: 0; padding: 10px 14px; }
+.backtest-trade { display: grid; grid-template-columns: minmax(104px, 1.2fr) 44px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr); gap: 8px; align-items: baseline; padding: 7px 14px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.backtest-trade:last-child { border-bottom: 0; }
+.backtest-trade > span:nth-child(n + 3) { text-align: right; }
+.backtest-trade-head { position: sticky; top: 0; z-index: 1; background: var(--surface); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.backtest-buy { font-weight: 600; color: var(--buy); }
+.backtest-sell { font-weight: 600; color: var(--sell); }
+
+/* ---------- phone ---------- */
+@media (max-width: 720px) {
+  .backtest-form { padding: 12px; }
+  .backtest-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .backtest-options { align-items: stretch; flex-direction: column; }
+  .backtest-venue { width: 100%; }
+  .backtest-venue select { flex: 1; width: 100%; }
+  .backtest-actions button { width: 100%; }
+  .backtest-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .backtest-stats .stat-value { font-size: 17px; }
+  .backtest-trade { grid-template-columns: minmax(0, 1fr) 40px minmax(0, 0.9fr) minmax(0, 0.9fr); padding: 7px 12px; }
+  .backtest-trade > span:nth-child(5), .backtest-trade > span:nth-child(6) { grid-row: 2; font-size: 12px; color: var(--muted); }
+  .backtest-trade > span:nth-child(5) { grid-column: 3; }
+  .backtest-trade > span:nth-child(6) { grid-column: 4; }
+  .backtest-trade:not(.backtest-trade-head) > span:nth-child(5)::before { content: "QU "; }
+  .backtest-trade:not(.backtest-trade-head) > span:nth-child(6)::before { content: "fee "; }
+  .backtest-trade-head > span:nth-child(5), .backtest-trade-head > span:nth-child(6) { display: none; }
+}
+@media (max-width: 340px) {
+  .backtest-fields { grid-template-columns: minmax(0, 1fr); }
+}

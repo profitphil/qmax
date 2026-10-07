@@ -1,0 +1,15 @@
+{
+  "name": "@qmax/sdk",
+  "version": "0.1.0",
+  "description": "Client for the QMax API: the best route to the max for your money across QX and QSwap on Qubic, with a split-order plan builder.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/types/sdk/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/types/sdk/index.d.ts", "import": "./dist/index.js" },
+    "./agent": { "types": "./dist/types/sdk/agent.d.ts", "import": "./dist/agent.js" }
+  },
+  "files": ["dist", "README.md"],
+  "license": "UNLICENSED",
+  "private": true
+}

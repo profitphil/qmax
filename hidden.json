@@ -1,0 +1,12 @@
+[
+  {
+    "symbol": "GARTH",
+    "issuer": "GARTHFANXMPXMDPEZFQPWFPYMHOAWTKILINCTRMVLFFVATKVJRKEDYXGHJBF",
+    "reason": "Deprecated token (the live GARTH is the one issued by PHOENIX…)"
+  },
+  {
+    "symbol": "CODED",
+    "issuer": "CODEDBUUDDYHECBVSUONSSWTOJRCLZSWHFHZIUWVFGNWVCKIWJCSDSWGQAAI",
+    "reason": "CodedBuddy CODED token, hidden (the live CODED is the one issued by CODEDC…)"
+  }
+]

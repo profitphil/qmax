@@ -1,0 +1,12 @@
+# QMax is open to search engines and to AI agents and the crawlers behind them.
+# For agents, the guide is /llms.txt and the API's OpenAPI document is /api/v1/openapi.json.
+
+User-agent: *
+Allow: /
+# The API answers requests, not pages: crawlers need not walk it. The guides above stay readable.
+Disallow: /api/
+Allow: /api/v1/openapi.json
+Allow: /api/v1/plans
+Allow: /api/v1/x402
+
+Sitemap: https://qmax.exchange/sitemap.xml
