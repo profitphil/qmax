@@ -1,5 +1,5 @@
 import type { QuoteResponse } from "./apitypes.ts";
-import { buildExecutionPlan } from "./exec.ts";
+import { buildExecutionPlan, fitBidsToBalance, fitNote } from "./exec.ts";
 import type { ExecutionPlan, TxStep } from "./exec.ts";
 import { checkQuotePlan } from "./plancheck.ts";
 import { summarizeOutcome } from "./verify.ts";
@@ -50,14 +50,21 @@ export async function prepareTrade(env: TradeEnv, req: TradeRequest, wallet: str
   const snap = await env.snapshot(wallet, quote.assetInfo.issuer, quote.assetInfo.assetName);
   // What moving shares costs comes from the network, never from the quote.
   const onChainFees = await env.fees?.().catch(() => undefined);
-  const trusted = onChainFees ? { ...quote, assetInfo: { ...quote.assetInfo, transferFeeQu: onChainFees } } : quote;
-  const plan = buildExecutionPlan(trusted, req.side === "sell" ? snap.holdings : {});
+  let trusted = onChainFees ? { ...quote, assetInfo: { ...quote.assetInfo, transferFeeQu: onChainFees } } : quote;
+  let plan = buildExecutionPlan(trusted, req.side === "sell" ? snap.holdings : {});
+  // A buy the wallet can pay for but cannot hold the whole price allowance for is capped lower (never below the price the fill reaches) instead of refused.
+  const fit = req.side === "buy" ? fitBidsToBalance(trusted, snap.balanceQu) : null;
+  if (fit) {
+    trusted = fit.quote;
+    plan = buildExecutionPlan(trusted);
+  }
   // What is about to be signed must be what was asked for: this asset (and issuer, if known), this side and size, limits inside the slippage setting.
   const check = checkQuotePlan(trusted, plan, { side: req.side, qty: req.qty, assetName: req.asset.split(".")[0], issuer: req.issuer, slippageBps: req.slippageBps, onChainFees });
   if (check.problems.length) throw new Error(`QMax's answer does not match what was asked for, so nothing was signed: ${check.problems.join("; ")}.`);
+  if (fit) check.warnings.push(fitNote(fit, req.slippageBps));
   if (plan.maxOutlayQu > snap.balanceQu)
     throw new Error(
-      `Not enough QU: this trade needs up to ${plan.maxOutlayQu.toLocaleString("en-US")} QU in the wallet (fees are paid in QU, even when selling) and the wallet has ${snap.balanceQu.toLocaleString("en-US")} QU.`,
+      `Not enough QU: this trade needs up to ${plan.maxOutlayQu.toLocaleString("en-US")} QU in the wallet (fees are paid in QU, even when selling) and the wallet has ${snap.balanceQu.toLocaleString("en-US")} QU.${req.side === "buy" ? ` The shares cost about ${Math.round(quote.totalQu).toLocaleString("en-US")} QU, but a buy holds its price cap times the quantity until it fills and refunds what is not used.` : ""}`,
     );
   const worse = shownTotalQu !== undefined && (req.side === "buy" ? quote.totalQu > shownTotalQu * 1.005 : quote.totalQu < shownTotalQu * 0.995);
   return { quote: trusted, plan, balanceQu: snap.balanceQu, worse, ...(check.warnings.length ? { warnings: check.warnings } : {}) };

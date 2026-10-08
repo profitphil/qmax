@@ -53,6 +53,56 @@ function assetInput(issuer: string, assetName: string, ...i64s: number[]) {
   return w.bytes;
 }
 
+/** A quote whose QX legs say the worst price their fill reaches (what the API sends as `priceRangeQu`). */
+export interface FitQuote extends Omit<ExecutableQuote, "route"> {
+  route: { venue: string; qty: number; execution: ExecutionHint; priceRangeQu?: { best?: number; worst: number } }[];
+}
+
+/**
+ * A buy is signed as a QX bid with a price cap (the slippage allowance on top of the quoted price), and QX takes cap x quantity from the wallet when the bid is placed, then refunds
+ * the part the match did not use. So a wallet that can pay for the quote but not for the whole allowance was refused: 400,000 QDOGE at 24 QU costs 9.6 million, but 1% above 24 rounds up
+ * to a whole 25 QU, so 10 million was held back and a wallet with 9.76 million was told it did not have enough. The allowance is only protection against the book moving, so it can be
+ * cut to what the wallet can cover, but never below the worst price the fill reaches (the bid would not fill below that). Returns the quote with the lower caps and what changed, or
+ * null when there is nothing to do (the wallet covers it already, it is not a buy) or when even the quoted price is more than the wallet holds.
+ */
+export function fitBidsToBalance<Q extends FitQuote>(quote: Q, balanceQu: number, holdings: Holdings = {}): { quote: Q; maxOutlayBefore: number; maxOutlayAfter: number; capBefore: number; capAfter: number } | null {
+  if (quote.side !== "buy") return null;
+  const before = buildExecutionPlan(quote, holdings).maxOutlayQu;
+  if (before <= balanceQu) return null;
+  const bids = quote.route
+    .map((leg, i) => ({ leg, i }))
+    .filter(({ leg }) => leg.execution.type === "qx-bid" && typeof leg.priceRangeQu?.worst === "number" && leg.priceRangeQu.worst >= 1);
+  if (!bids.length) return null;
+  const cap = (leg: Q["route"][number]) => (leg.execution as { limitPrice: number }).limitPrice;
+  const qtyOf = (leg: Q["route"][number]) => (leg.execution as { qty: number }).qty;
+  // Every bid at the worst price its fill reaches (never above the cap it already has): the least the wallet must hold.
+  const limits = new Map<number, number>();
+  let atWorst = before;
+  for (const { leg, i } of bids) {
+    const worst = Math.min(cap(leg), leg.priceRangeQu!.worst);
+    atWorst -= (cap(leg) - worst) * qtyOf(leg);
+    limits.set(i, worst);
+  }
+  if (atWorst > balanceQu) return null;
+  // Then what is left goes back into the allowance, bid by bid, as far as whole prices go.
+  let spare = balanceQu - atWorst;
+  for (const { leg, i } of bids) {
+    const extra = Math.min(cap(leg) - limits.get(i)!, Math.floor(spare / qtyOf(leg)));
+    limits.set(i, limits.get(i)! + extra);
+    spare -= extra * qtyOf(leg);
+  }
+  const route = quote.route.map((leg, i) => (limits.has(i) ? { ...leg, execution: { ...leg.execution, limitPrice: limits.get(i)! } } : leg)) as Q["route"];
+  const fitted = { ...quote, route };
+  const first = bids[0];
+  return { quote: fitted, maxOutlayBefore: before, maxOutlayAfter: buildExecutionPlan(fitted, holdings).maxOutlayQu, capBefore: cap(first.leg), capAfter: limits.get(first.i)! };
+}
+
+/** The sentence that tells a person their buy was capped lower than the slippage setting would have allowed, and what that means. */
+export function fitNote(f: { maxOutlayBefore: number; maxOutlayAfter: number; capBefore: number; capAfter: number }, slippageBps: number): string {
+  const n = (x: number) => x.toLocaleString("en-US");
+  return `The wallet does not hold the full ${slippageBps / 100}% price allowance (QX holds the price cap times the quantity, ${n(f.maxOutlayBefore)} QU, until the order fills, then refunds what is not used), so the buy is capped at ${n(f.capAfter)} QU each instead of ${n(f.capBefore)} and holds ${n(f.maxOutlayAfter)} QU. If the price moves up before it lands, the part that does not fill stays on QX as an open bid.`;
+}
+
 /**
  * Turns a quote into the ordered list of transactions the user's wallet must sign:
  * (if selling) any share-management move first, then one call per venue.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { buildExecutionPlan } from "../src/exec.ts";
+import { buildExecutionPlan, fitBidsToBalance, fitNote } from "../src/exec.ts";
 import type { ExecutionPlan } from "../src/exec.ts";
 import { fetchQuote, reportRef, shownName } from "./client.ts";
 import { fetchVenueQuote } from "./max-api.ts";
@@ -80,16 +80,23 @@ export function ExecuteModal({ shown, slippageBps, expected, refTag, venue, onFi
         const trusted = onChainFees ? { ...fresh, assetInfo: { ...fresh.assetInfo, transferFeeQu: onChainFees } } : fresh;
         // Trading needs an active pass (checked against QPayhub's receipt, not just what this browser remembers).
         if (!(await verifiedPass(wallet.publicKey))) throw new Error("Your QMax pass has ended. Close this and unlock trading again.");
-        const p = buildExecutionPlan(trusted, shown.side === "sell" ? holdings : {});
+        let ready = trusted;
+        let p = buildExecutionPlan(ready, shown.side === "sell" ? holdings : {});
+        // A buy the wallet can pay for but cannot hold the whole price allowance for is capped lower (never below the price the fill reaches) instead of refused.
+        const fit = shown.side === "buy" ? fitBidsToBalance(ready, bal) : null;
+        if (fit) {
+          ready = fit.quote;
+          p = buildExecutionPlan(ready);
+        }
         // What is about to be signed must be what was asked for: this asset and issuer, this side and size, limits inside the slippage setting.
-        const check = checkQuotePlan(trusted, p, { side: shown.side, qty: shown.qty, assetName: expected.assetName, issuer: expected.issuer, slippageBps, onChainFees });
+        const check = checkQuotePlan(ready, p, { side: shown.side, qty: shown.qty, assetName: expected.assetName, issuer: expected.issuer, slippageBps, onChainFees });
         if (check.problems.length) throw new Error(`QMax's answer does not match what you asked for, so nothing was signed: ${check.problems.join("; ")}.`);
-        setPlanWarnings(check.warnings);
+        setPlanWarnings(fit ? [...check.warnings, fitNote(fit, slippageBps)] : check.warnings);
         // Sells need QU too: the routing fee is paid up front, and QSwap takes a flat 100,000 QU per swap.
         if (p.maxOutlayQu > bal)
-          throw new Error(`Not enough QU: this trade needs up to ${n(p.maxOutlayQu)} QU in the wallet (flat market fees are paid in QU, even when selling) and the wallet has ${n(bal)} QU.`);
+          throw new Error(`Not enough QU: this trade needs up to ${n(p.maxOutlayQu)} QU in the wallet (flat market fees are paid in QU, even when selling) and the wallet has ${n(bal)} QU.${shown.side === "buy" ? ` The shares cost about ${n(Math.round(fresh.totalQu))} QU, but a buy holds its price cap times the quantity until it fills and refunds what is not used.` : ""}`);
         setBefore(snap);
-        setQuote(trusted);
+        setQuote(ready);
         setPlan(p);
         setBalance(bal);
       } catch (e) {
