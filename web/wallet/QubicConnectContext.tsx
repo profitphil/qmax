@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { QubicHelper } from "@qubic-lib/qubic-ts-library/dist/qubicHelper";
 import Crypto, { SIGNATURE_LENGTH } from "@qubic-lib/qubic-ts-library/dist/crypto";
 import { MetamaskActions, MetaMaskContext, MetaMaskProvider } from "./MetamaskContext";
 import { connectTypes, defaultSnapOrigin } from "./config";
 import { useWalletConnect } from "./WalletConnectContext";
+import { currentExtensionAccount, extensionMessage, extensionProvider, signWithExtension, waitForExtension, watchExtension } from "./extension.ts";
 import { QubicTransaction } from "@qubic-lib/qubic-ts-library/dist/qubic-types/QubicTransaction";
 import { base64ToUint8Array, decodeUint8ArrayTx, uint8ArrayToBase64 } from "./utils/tx.ts";
 import { toast } from "sonner";
@@ -46,12 +47,14 @@ export function QubicConnectProvider({ children }: QubicConnectProviderProps) {
   const [connected, setConnected] = useState<boolean>(false);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [showConnectModal, setShowConnectModal] = useState<boolean>(false);
-  const { signTransaction } = useWalletConnect();
+  const { signTransaction, isConnected: wcConnected, adoptedAt } = useWalletConnect();
   const [state, dispatch] = useContext(MetaMaskContext);
 
   const qHelper = new QubicHelper();
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   const WALLETCONNECT_SIGN_TIMEOUT_MS = 120000;
+  /** The extension itself waits up to 150 seconds for the person to approve and enter their passphrase. */
+  const EXTENSION_SIGN_TIMEOUT_MS = 170_000;
 
   const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -170,6 +173,8 @@ export function QubicConnectProvider({ children }: QubicConnectProviderProps) {
   };
 
   const disconnect = (): void => {
+    // Ending it here ends it in the extension too, so the site is not left approved there.
+    if (wallet?.connectType === "extension") void extensionProvider()?.disconnect().catch(() => {});
     localStorage.removeItem("wallet");
     localStorage.removeItem("wallet-config");
     setWallet(null);
@@ -179,6 +184,69 @@ export function QubicConnectProvider({ children }: QubicConnectProviderProps) {
   const toggleConnectModal = (): void => {
     setShowConnectModal(!showConnectModal);
   };
+
+  // A connection that can be picked up again after a reload is picked up: the wallet app's session while it is still alive, and the extension while it still shares the same account.
+  // A seed or a vault was only ever in memory, so those start from the dialog again. (The saved record holds no secret: the type, the address, the name and the account list.)
+  useEffect(() => {
+    if (wallet || adoptedAt) return; // already connected, or a new connection was just made and the person is choosing the account
+    let saved: Wallet | null = null;
+    try {
+      saved = JSON.parse(localStorage.getItem("wallet") ?? "null");
+    } catch {
+      return;
+    }
+    if (!saved || !/^[A-Z]{60}$/.test(String(saved.publicKey))) return;
+    const keep = { connectType: saved.connectType, publicKey: saved.publicKey, alias: saved.alias, accounts: saved.accounts };
+    if (saved.connectType === "walletconnect") {
+      if (wcConnected) {
+        setWallet(keep);
+        setConnected(true);
+      }
+      return;
+    }
+    if (saved.connectType === "extension") {
+      let alive = true;
+      (async () => {
+        const provider = await waitForExtension();
+        const account = provider ? await currentExtensionAccount(provider) : null;
+        if (!alive || !account || account.identity !== saved!.publicKey) return;
+        setWallet({ ...keep, alias: account.name ?? keep.alias, accounts: [account.identity] });
+        setConnected(true);
+      })();
+      return () => {
+        alive = false;
+      };
+    }
+  }, [wallet === null, wcConnected, adoptedAt]);
+
+  // Switching account or disconnecting the site inside the extension is followed here: the extension signs with its active account, so the page must not go on thinking it is the old one.
+  useEffect(() => {
+    if (wallet?.connectType !== "extension") return;
+    const provider = extensionProvider();
+    if (!provider) return;
+    const was = wallet.publicKey;
+    return watchExtension(
+      provider,
+      (account) => {
+        if (!account) {
+          disconnect();
+          toast.error("The extension no longer shares an account with QMax. Connect it again.");
+        } else if (account.identity !== was) {
+          connect({ connectType: "extension", publicKey: account.identity, alias: account.name, accounts: [account.identity] });
+          toast(`Switched to ${account.name ?? `${account.identity.slice(0, 6)}…${account.identity.slice(-4)}`} in the extension`);
+        }
+      },
+      () => {
+        disconnect();
+        toast("Disconnected in the Qubic Wallet extension.");
+      },
+    );
+  }, [wallet?.connectType, wallet?.publicKey]);
+
+  // A connection the wallet approved while the page was away is picked up (WalletConnectContext): open the dialog at the choice of account instead of leaving the person to ask again.
+  useEffect(() => {
+    if (adoptedAt && !wallet) setShowConnectModal(true);
+  }, [adoptedAt]);
 
   const getMetaMaskPublicId = async (accountIdx: number = 0, confirm: boolean = false): Promise<string> => {
     const provider = getResolvedMetaMaskProvider() ?? window.ethereum;
@@ -291,6 +359,35 @@ export function QubicConnectProvider({ children }: QubicConnectProviderProps) {
           if (signToastId !== undefined) {
             toast.dismiss(signToastId);
           }
+        }
+      }
+
+      case "extension": {
+        const provider = extensionProvider();
+        if (!provider) throw new Error("The Qubic Wallet extension is not available on this page any more. Connect it again.");
+        const decodedTx = processedTx instanceof Uint8Array ? decodeUint8ArrayTx(processedTx) : processedTx;
+        const toastId = toast.loading("Approve in the Qubic Wallet extension", { icon: "🔑" });
+        try {
+          const destinationIdentity = await qHelper.getIdentity(decodedTx.destinationPublicKey.getIdentity());
+          // The extension signs with whichever account is active in it, so what comes back is checked against exactly what was asked (signWithExtension), account included.
+          const signed = await withVisibilityAwareTimeout(
+            signWithExtension(provider, {
+              source: decodedTx.sourcePublicKey.getPackageData(),
+              dest: decodedTx.destinationPublicKey.getPackageData(),
+              destinationIdentity,
+              amount: BigInt(decodedTx.amount.getNumber()),
+              tick: decodedTx.tick,
+              inputType: decodedTx.inputType,
+              payload: decodedTx.payload.getPackageData(),
+            }),
+            EXTENSION_SIGN_TIMEOUT_MS,
+            "The extension did not answer in time. Open it, approve the request, and try again.",
+          );
+          return { tx: signed };
+        } catch (error) {
+          throw new Error(extensionMessage(error));
+        } finally {
+          toast.dismiss(toastId);
         }
       }
 

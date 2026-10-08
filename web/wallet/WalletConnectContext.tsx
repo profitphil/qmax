@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import SignClient from "@walletconnect/sign-client";
 import type { WalletConnectAccount } from "./types/account";
-import { describeFailure, makePairing, MemoryStorage, startClient } from "./pairing.ts";
+import { describeFailure, makePairing, MemoryStorage, newestQubicSession, pairingIsFresh, startClient } from "./pairing.ts";
 
 interface WalletConnectContextType {
   signClient: SignClient | null;
@@ -11,6 +11,10 @@ interface WalletConnectContextType {
   /** A pairing link and a way to wait for the wallet to approve it. When no link could be made, `uri` is empty and `error` says why, in words fit to show. */
   connect: () => Promise<{ uri: string; approve: () => Promise<boolean>; error?: string }>;
   disconnect: () => Promise<void>;
+  /** When the page took up a connection the wallet approved while the page was away (null if it did not). */
+  adoptedAt: number | null;
+  /** Looks again, now, for a connection the wallet approved while the page was in the background, and takes it up. True if one was found. */
+  recheck: () => Promise<boolean>;
   requestAccounts: () => Promise<WalletConnectAccount[]>;
   sendQubic: (params: { from: string; to: string; amount: number }) => Promise<any>;
   signTransaction: (params: {
@@ -39,6 +43,31 @@ const clientOptions = () => ({
     icons: [`${window.location.origin}/apple-touch-icon.png`],
   },
 });
+
+/** When this page last started a pairing, kept so a page that was thrown away while the wallet app was open still knows it was waiting for an answer. */
+const PENDING_KEY = "qmax.wc.pending";
+const readPending = (): number | null => {
+  try {
+    const v = Number(localStorage.getItem(PENDING_KEY));
+    return v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+};
+const markPending = () => {
+  try {
+    localStorage.setItem(PENDING_KEY, String(Date.now()));
+  } catch {
+    // a browser that blocks storage just does not get the pick-up
+  }
+};
+const clearPending = () => {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // nothing to clear
+  }
+};
 
 let clientPromise: Promise<SignClient> | null = null;
 
@@ -70,6 +99,7 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
   const [sessionTopic, setSessionTopic] = useState<string>("");
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [adoptedAt, setAdoptedAt] = useState<number | null>(null);
 
   const connect = async () => {
     setIsConnecting(true);
@@ -89,6 +119,7 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
           }),
       );
       if (!uri) return { uri: "", approve: async () => false, error: "WalletConnect did not give a connection link. Try again." };
+      markPending();
 
       // Resolves true once the wallet approves, false if it rejects or the request expires.
       const approve = async (): Promise<boolean> => {
@@ -97,6 +128,7 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
           setSessionTopic(session.topic);
           setIsConnected(true);
           localStorage.setItem("sessionTopic", session.topic);
+          clearPending();
           return true;
         } catch (e) {
           console.error("Connection rejected:", e);
@@ -212,6 +244,38 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
     });
   };
 
+  /** Takes up the newest Qubic session when the page started a pairing recently and a session the page has not recorded exists (a newer one than the one it has). */
+  const adoptAway = (client: SignClient): boolean => {
+    if (!pairingIsFresh(readPending())) return false;
+    let session;
+    try {
+      session = newestQubicSession(client.session.getAll());
+    } catch {
+      return false;
+    }
+    if (!session || session.topic === localStorage.getItem("sessionTopic")) return false;
+    localStorage.setItem("sessionTopic", session.topic);
+    setSessionTopic(session.topic);
+    setIsConnected(true);
+    clearPending();
+    setAdoptedAt(Date.now());
+    return true;
+  };
+
+  const recheck = async (): Promise<boolean> => {
+    if (!pairingIsFresh(readPending())) return false;
+    const client = await getClient().catch(() => null);
+    if (!client) return false;
+    attach(client);
+    try {
+      // The phone may have dropped the connection to the relay while the page slept: bring it back so an answer that is waiting gets delivered.
+      if (client.core.relayer.connected === false) await client.core.relayer.restartTransport();
+    } catch {
+      // the library reconnects by itself too; this only hurries it
+    }
+    return adoptAway(client);
+  };
+
   // Hooks the page's state up to the client once per client (the first thing to get it, the page or a connect, does it).
   const attached = useRef<SignClient | null>(null);
   const attach = (client: SignClient): SignClient => {
@@ -229,6 +293,8 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
         localStorage.removeItem("sessionTopic");
       }
     }
+    // A wallet that answered while this page was in the background (a phone puts the browser to sleep when the wallet app opens) left a session the page never saw approved.
+    adoptAway(client);
 
     client.on("session_delete", () => {
       setSessionTopic("");
@@ -279,6 +345,8 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
     isConnected,
     connect,
     disconnect,
+    adoptedAt,
+    recheck,
     requestAccounts,
     sendQubic,
     signTransaction,

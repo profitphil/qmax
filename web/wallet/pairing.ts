@@ -78,3 +78,31 @@ export function describeFailure(e: unknown): string {
   const reason = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, " ").slice(0, 120);
   return `Could not create the connection link${reason ? ` (${reason})` : ""}. Check your connection, turn off a VPN or content blocker for this site, or try another browser.`;
 }
+
+// ---- picking up a connection the wallet approved while this page was in the background
+
+/** How long a pairing the page started is still expected to be answered: the link itself lives about five minutes, so ten is generous. */
+export const PAIRING_WINDOW_MS = 10 * 60_000;
+
+/** Whether the page started a pairing recently (`startedAt` is when, or null for none). */
+export const pairingIsFresh = (startedAt: number | null, now = Date.now(), windowMs = PAIRING_WINDOW_MS): boolean => startedAt !== null && Number.isFinite(startedAt) && now >= startedAt && now - startedAt < windowMs;
+
+/**
+ * Of the sessions a WalletConnect client holds, the newest one that is for Qubic. The page records a session only at the moment it is waiting to see it approved, so a wallet that
+ * answered while the page was in the background (a phone puts the browser to sleep when the wallet app opens, and may throw the page away) left a session the page did not know about.
+ * A session can only exist because this page's own pairing was approved, so taking it up is safe.
+ */
+export function newestQubicSession<S extends { topic: string; expiry: number; namespaces?: Record<string, unknown> }>(sessions: readonly S[]): S | null {
+  const mine = sessions.filter((s) => s.namespaces && Object.prototype.hasOwnProperty.call(s.namespaces, "qubic"));
+  return mine.length ? mine.reduce((a, b) => (b.expiry > a.expiry ? b : a)) : null;
+}
+
+/**
+ * Whether this looks like the in-app browser of another app (Facebook, Instagram, LINE, WeChat and so on, or an Android WebView, or an iPhone web view that is not Safari). Those
+ * often cannot hand over to a wallet app, so the person is told to open the page in their own browser. A best guess from the browser's own description of itself.
+ */
+export function inAppBrowser(userAgent: string): boolean {
+  if (/\b(FBAN|FBAV|FB_IAB|Instagram|Line\/|Twitter|Snapchat|MicroMessenger|KAKAOTALK|Discord)\b/i.test(userAgent)) return true;
+  if (/; wv\)/.test(userAgent)) return true;
+  return /iPhone|iPad|iPod/.test(userAgent) && !/Safari\//.test(userAgent);
+}

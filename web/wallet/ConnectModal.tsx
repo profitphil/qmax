@@ -2,12 +2,15 @@
 // (MetaMask Snap, WalletConnect, private seed, vault file).
 import { useContext, useEffect, useRef, useState } from "react";
 import { qrWithLogo } from "../../src/qrlogo.ts";
+import { BASE } from "../base.ts";
 import { MetaMaskContext } from "./MetamaskContext.tsx";
 import { useQubicConnect } from "./QubicConnectContext.tsx";
 import { useWalletConnect } from "./WalletConnectContext.tsx";
+import { EXTENSION_RELEASES_URL, connectExtension, extensionMessage, waitForExtension } from "./extension.ts";
+import { inAppBrowser } from "./pairing.ts";
 import { Icon, Modal } from "../ui.tsx";
 
-type Mode = "none" | "metamask" | "walletconnect" | "private-seed" | "vault-file" | "account-select";
+type Mode = "none" | "metamask" | "walletconnect" | "extension" | "private-seed" | "vault-file" | "account-select";
 interface PickAccount {
   publicId: string;
   alias?: string;
@@ -16,7 +19,7 @@ interface PickAccount {
 export function ConnectModal({ onClose }: { onClose: () => void }) {
   const [mm] = useContext(MetaMaskContext);
   const { connect, mmSnapConnect, privateKeyConnect, vaultFileConnect } = useQubicConnect();
-  const { connect: wcConnect, isConnected: wcConnected, requestAccounts } = useWalletConnect();
+  const { connect: wcConnect, isConnected: wcConnected, requestAccounts, recheck: wcRecheck } = useWalletConnect();
 
   const [mode, setMode] = useState<Mode>("none");
   const [seed, setSeed] = useState("");
@@ -34,6 +37,8 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
   const [fromWc, setFromWc] = useState(false);
   // On a phone the wallet app is on the same device, so a deep link beats scanning a QR code.
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  /** A phone's in-app browser (Facebook, Instagram and the like) often cannot hand over to the wallet app. */
+  const inApp = isMobile && inAppBrowser(navigator.userAgent);
   const vaultRef = useRef<{ revealSeed: (publicId: string) => Promise<string> } | null>(null);
 
   const [wcStatus, setWcStatus] = useState<"preparing" | "waiting" | "failed">("preparing");
@@ -41,6 +46,52 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
   const [wcError, setWcError] = useState("");
   const [copied, setCopied] = useState<"" | "yes" | "failed">("");
   const attempt = useRef(0);
+
+  // The Qubic Wallet browser extension: it is looked for when asked for (it puts itself on the page a moment after the page loads), then the person approves in it.
+  const [extStatus, setExtStatus] = useState<"looking" | "connecting" | "missing" | "failed">("looking");
+  const [extError, setExtError] = useState("");
+  const mounted = useRef(true);
+  useEffect(() => () => void (mounted.current = false), []);
+  const startExtension = async () => {
+    setMode("extension");
+    setExtStatus("looking");
+    setExtError("");
+    const provider = await waitForExtension();
+    if (!mounted.current) return;
+    if (!provider) return setExtStatus("missing");
+    setExtStatus("connecting");
+    try {
+      const account = await connectExtension(provider);
+      if (!mounted.current) return;
+      connect({ connectType: "extension", publicKey: account.identity, alias: account.name, accounts: [account.identity] });
+      onClose();
+    } catch (e) {
+      if (!mounted.current) return;
+      setExtError(extensionMessage(e));
+      setExtStatus("failed");
+    }
+  };
+
+  // Waiting for the wallet app: when the person comes back to this page (it may have been put to sleep, or reloaded, while the wallet was open), look again for the answer at once
+  // and again a moment later, instead of waiting for the page to notice by itself.
+  useEffect(() => {
+    if (mode !== "walletconnect" || wcStatus !== "waiting") return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const back = () => {
+      if (document.visibilityState !== "visible") return;
+      void wcRecheck();
+      timers.push(setTimeout(() => void wcRecheck(), 1500), setTimeout(() => void wcRecheck(), 4000));
+    };
+    document.addEventListener("visibilitychange", back);
+    window.addEventListener("focus", back);
+    window.addEventListener("pageshow", back);
+    return () => {
+      document.removeEventListener("visibilitychange", back);
+      window.removeEventListener("focus", back);
+      window.removeEventListener("pageshow", back);
+      timers.forEach(clearTimeout);
+    };
+  }, [mode, wcStatus]);
 
   /** Creates a fresh pairing link, shows it, and waits for the wallet to approve it. */
   const startWalletConnect = async () => {
@@ -96,6 +147,9 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
   };
   const linkRef = useRef<HTMLInputElement>(null);
   const deepLink = `qubic-wallet://pairwc/${uri}`;
+  // On a phone the button goes through QMax's own hand-off page (the one the Discord bot uses): a normal page that opens the wallet app when tapped, says what to do where an in-app
+  // browser refuses, and offers the link to copy. The link travels after the "#", which the browser never sends anywhere.
+  const handoff = `${BASE}/open#${encodeURIComponent(uri)}`;
 
   useEffect(() => {
     if (!wcConnected) return;
@@ -151,6 +205,10 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
               <img src="/wallet-connect.svg" alt="" width={28} height={28} />
               <span><b>WalletConnect</b><small>Qubic Wallet app on your phone or computer</small></span>
             </button>
+            <button className="walletopt" onClick={startExtension}>
+              <span className="walletopt-icon"><Icon name="wallet" size={18} /></span>
+              <span><b>Qubic Wallet extension</b><small>Browser extension, beta (Chrome and similar)</small></span>
+            </button>
             <p className="divider"><span>Advanced, use with care</span></p>
             <button className="walletopt plain" onClick={() => setMode("private-seed")}>
               <span className="walletopt-icon"><Icon name="shield" size={18} /></span>
@@ -172,6 +230,28 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
               <button onClick={async () => { await mmSnapConnect(); onClose(); }}>{mmLabel}</button>
             )}
             <button className="ghost" onClick={() => setMode("none")}>Back</button>
+          </>
+        )}
+
+        {mode === "extension" && (
+          <>
+            {extStatus === "missing" ? (
+              <>
+                <p className="err">The Qubic Wallet extension was not found on this page.</p>
+                <p className="note">It is a browser extension for Chrome and other Chromium browsers (beta). Install it from <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">its releases page</a> (a manual install with Developer Mode), then reload this page and try again.</p>
+                <button onClick={startExtension}>Look again</button>
+              </>
+            ) : extStatus === "failed" ? (
+              <>
+                <p className="err">{extError}</p>
+                <button onClick={startExtension}>Try again</button>
+              </>
+            ) : (
+              <p className="note status">{extStatus === "looking" ? "Looking for the extension…" : "Approve the connection in the Qubic Wallet extension…"}</p>
+            )}
+            <div className="wc-col">
+              <button className="ghost" onClick={() => setMode("none")}>Back</button>
+            </div>
           </>
         )}
 
@@ -198,6 +278,7 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
                     </>
                   )}
                 </ol>
+                {inApp && <p className="warn">This looks like an in-app browser, which often cannot open your wallet app. If nothing happens, open this page in your phone's own browser (Chrome or Safari) from its menu, or use Copy link.</p>}
 
                 {/* The code comes first, above the buttons (on a phone, for a wallet on another device); the buttons are as wide as the code. */}
                 <div className="wc-col">
@@ -208,7 +289,7 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
                   </>
                 )}
                 {isMobile ? (
-                  <a className={uri ? "btn" : "btn disabled"} href={uri ? deepLink : undefined} role="button">Open in Qubic Wallet</a>
+                  <a className={uri ? "btn" : "btn disabled"} href={uri ? handoff : undefined} target="_blank" rel="noopener noreferrer" role="button">Open in Qubic Wallet</a>
                 ) : (
                   uri && <a className="btn" href={deepLink} role="button">Open in Qubic Wallet</a>
                 )}
