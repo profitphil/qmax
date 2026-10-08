@@ -108,6 +108,35 @@ export interface TradeSource {
   candles(assetId: string, q: { venue: "auto" | "QX" | "QSwap" | "all"; intervalMs: number; sinceMs: number; /** Add older QX history from Quhub (marked, unverified) before the archive starts. Only the candle chart asks. */ withImported?: boolean }): { asset: string; venue: "QX" | "QSwap" | "all"; candles: TradeCandle[]; volume24hQu: number; trades24h: number } | null;
 }
 
+/** A QX trade newer than this is the price as it stands; an older one is kept inside today's QX bid and ask. */
+export const STALE_TRADE_MS = 7 * 86_400_000;
+
+/**
+ * An asset's price as QMax shows it, drawn from QX: every asset trades on QX (QSwap is an extra pool beside it, never the only market), so there is always a QX price. It is the
+ * price of the newest QX trade when that is recent (within 7 days). A QSwap pool is only a reserve ratio and stays put when nobody trades against it (QMINE's said 4,157 for days
+ * while QX traded at 3,994), and the middle of a thin QX book can sit far from every trade (QSILVER's was 3.65 million against a last trade at 100,001). An older trade may no longer
+ * be where the market is (QEARN's, 146 days ago, was above today's best ask), so it is kept inside the current QX bid and ask. An asset with no QX trade on record takes the middle of
+ * its QX bid and ask (or the one side there is). The order-book or pool price stays available as `bookPriceQu`; `lastPriceQu` is always the raw trade.
+ */
+export function priceFromQx<T extends { priceQu: number | null; bestBid?: number | null; bestAsk?: number | null }>(
+  a: T,
+  last: { price: number; ms: number } | undefined,
+  now = Date.now(),
+): T & { bookPriceQu?: number | null; lastPriceQu?: number; lastTradeAt?: number } {
+  const bid = a.bestBid != null && a.bestBid > 0 ? a.bestBid : null;
+  const ask = a.bestAsk != null && a.bestAsk > 0 ? a.bestAsk : null;
+  if (!last || !(last.price > 0)) {
+    const book = bid !== null && ask !== null ? (bid + ask) / 2 : bid ?? ask;
+    return book !== null && book !== a.priceQu ? { ...a, priceQu: book, bookPriceQu: a.priceQu } : a;
+  }
+  let price = last.price;
+  if (now - last.ms > STALE_TRADE_MS) {
+    if (bid !== null && price < bid) price = bid;
+    if (ask !== null && price > ask) price = ask;
+  }
+  return { ...a, priceQu: price, bookPriceQu: a.priceQu, lastPriceQu: last.price, lastTradeAt: last.ms };
+}
+
 /** "1 hour", "2 hours", "30 minutes": how long an x402 session lasts, for a sentence. */
 const spanOf = (seconds: number) => (seconds % 3600 === 0 ? `${seconds / 3600} hour${seconds === 3600 ? "" : "s"}` : `${Math.round(seconds / 60)} minutes`);
 
@@ -483,9 +512,9 @@ export function createApi(opts: ApiOptions): Server {
           const volumes = opts.trades?.volumes?.();
           if (!volumes) return send(res, 200, r);
           const lasts = opts.trades?.lasts?.();
+          const withLast = <T extends { id: string; priceQu: number | null }>(a: T) => priceFromQx(a, lasts?.get(a.id.toUpperCase()));
           const withVolume = r.assets.map((a) => {
-            const last = lasts?.get(a.id.toUpperCase());
-            return { ...a, ...(volumes.get(a.id.toUpperCase()) ?? { volume24hQu: 0, volume72hQu: 0, volume7dQu: 0, trades24h: 0, change24hPct: null, change72hPct: null, change7dPct: null }), ...(last ? { lastPriceQu: last.price, lastTradeAt: last.ms } : {}) };
+            return { ...withLast(a), ...(volumes.get(a.id.toUpperCase()) ?? { volume24hQu: 0, volume72hQu: 0, volume7dQu: 0, trades24h: 0, change24hPct: null, change72hPct: null, change7dPct: null }) };
           });
           if (order === "volume") withVolume.sort((a, b) => b.volume24hQu - a.volume24hQu || b.volume7dQu - a.volume7dQu); // a stable sort: ties stay most liquid first
           return send(res, 200, { ...r, assets: withVolume });
@@ -569,7 +598,9 @@ export function createApi(opts: ApiOptions): Server {
       if (url.pathname === "/v1/assets/search" && req.method === "GET") {
         const name = (url.searchParams.get("name") ?? "").trim();
         if (!/^[A-Za-z0-9]{1,7}$/.test(name)) throw new HttpError(400, "name must be 1-7 letters or digits");
-        return send(res, 200, { assets: (await opts.data.searchAssets?.(name)) ?? [] });
+        const found = (await opts.data.searchAssets?.(name)) ?? [];
+        const lasts = opts.trades?.lasts?.();
+        return send(res, 200, { assets: found.map((a) => priceFromQx(a, lasts?.get(a.id.toUpperCase()))) });
       }
       if (url.pathname === "/v1/quote") {
         let input: Record<string, unknown>;

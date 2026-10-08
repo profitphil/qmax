@@ -855,7 +855,9 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 /* ======================================================================== */
 /* One row of three screens as wide as the window: the asset list, the chart (it opens on this), the latest trades with the order panel. The chart's screen and the trades' screen are
    the two columns of the same desk (the desk is two screens wide); the symbol bar sticks to the left so it stays over both. */
-.app.pager { height: 100dvh; overflow: hidden; }
+.app.pager { height: 100dvh; overflow: hidden; overflow: clip; }
+/* The swipe layout never scrolls the page sideways. If anything ever pokes out past the screen edge, the phone must not slide the page over to show it (it then stays slid): `clip`, unlike `hidden`, cannot be scrolled even by the browser. */
+@media (max-width: 720px) { html, body { overflow-x: clip; } }
 .app.pager .nav { position: relative; }
 .app.pager .marketbar { height: 30px; flex-direction: row; }
 .app.pager .marketbar .ticker, .app.pager .resizer, .app.pager .bar-toggle, .app.pager .focus-btn { display: none; }

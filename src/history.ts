@@ -5,7 +5,7 @@ import { writeJsonFile } from "./safefile.ts";
 export interface Sample {
   /** ms since epoch */
   t: number;
-  /** The price QMax shows for the asset (pool price, else the middle of the best bid and ask). */
+  /** The price QMax shows for the asset (its newest QX trade; with none, the middle of its best QX bid and ask). */
   price: number | null;
   bid: number | null;
   ask: number | null;

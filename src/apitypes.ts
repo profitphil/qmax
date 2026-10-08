@@ -59,7 +59,11 @@ export interface AssetItem {
   /** The same over 72 hours and 7 days (what the list's volume window picks). */
   change72hPct?: number | null;
   change7dPct?: number | null;
-  /** The newest trade's price (QU per unit) and when it was (ms), absent for an asset with no trades on record; and when the order books were last read (ms). */
+  /**
+   * The price of the asset's newest QX trade (QU per unit) and when it was (ms), absent for an asset that has never traded on QX; `priceQu` is that same price when there
+   * is one. `bookPriceQu` is then the price from the order book or pool (the pool's price, else the middle of the best bid and ask). `probedAt` is when the books were last read (ms).
+   */
+  bookPriceQu?: number | null;
   lastPriceQu?: number;
   lastTradeAt?: number;
   probedAt?: number;

@@ -119,6 +119,12 @@ test("the newest trade's price and time, on whichever market traded last", async
   assert.equal(idx.last(key("ONLYQX"))?.price, 7);
   assert.ok((idx.last(key("CFB"))?.ms ?? 0) > h + HOUR - 1, "and says when it was");
   assert.equal(idx.last(key("NOPE")), null);
+  // asked for one market only, it answers for that market: QX's own newest trade, however much newer the QSwap swap is
+  assert.deepEqual([idx.last(key("CFB"))?.price, idx.last(key("CFB"))?.venue], [15, "QSwap"], "and says which market it was on");
+  assert.equal(idx.last(key("CFB"), "QX")?.price, 12, "QX's newest trade, not the QSwap swap");
+  assert.equal(idx.last(key("CFB"), "QSwap")?.price, 15);
+  assert.equal(idx.last(key("ONLYQX"), "QSwap"), null, "no swap on record");
+  assert.equal(idx.last(key("NOPE"), "QX"), null);
 });
 
 test("an asset is drawn from the venue asked for, or the other one if it never traded there", async () => {

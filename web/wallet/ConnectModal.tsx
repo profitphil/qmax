@@ -37,6 +37,8 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
   const vaultRef = useRef<{ revealSeed: (publicId: string) => Promise<string> } | null>(null);
 
   const [wcStatus, setWcStatus] = useState<"preparing" | "waiting" | "failed">("preparing");
+  // Why no link could be made, when that is the reason it failed (empty when the wallet turned it down or the link ran out).
+  const [wcError, setWcError] = useState("");
   const [copied, setCopied] = useState<"" | "yes" | "failed">("");
   const attempt = useRef(0);
 
@@ -48,9 +50,13 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
     setCopied("");
     setUri("");
     setQr("");
-    const { uri, approve } = await wcConnect();
+    setWcError("");
+    const { uri, approve, error } = await wcConnect();
     if (mine !== attempt.current) return;
-    if (!uri) return setWcStatus("failed");
+    if (!uri) {
+      setWcError(error ?? "");
+      return setWcStatus("failed");
+    }
     const approval = approve();
     setUri(uri);
     setWcStatus("waiting");
@@ -173,7 +179,7 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
           <>
             {wcStatus === "failed" ? (
               <>
-                <p className="err">The connection was cancelled or the link expired.</p>
+                <p className="err">{wcError || "The connection was cancelled or the link expired."}</p>
                 <button onClick={startWalletConnect}>Try again</button>
               </>
             ) : (

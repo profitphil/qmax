@@ -367,7 +367,7 @@ export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, 
   /** The price: typed with thousands separators like the amount; a whole number of QU, as QX takes no fractions. */
   const typePrice = (e: React.ChangeEvent<HTMLInputElement>) => setPriceText(formatTyped(e.target.value, e.target.selectionStart ?? e.target.value.length).text);
   const setPriceTo = (v: number | null | undefined) => v && v >= 1 && setPriceText(Math.round(v).toLocaleString("en-US"));
-  const refs: [string, number | null | undefined][] = [["Bid", bestBid], ["Ask", bestAsk], ["Last", asset.priceQu]];
+  const refs: [string, number | null | undefined][] = [["Bid", bestBid], ["Ask", bestAsk], ["Last", livePrice(asset)]];
   const pickType = (t: "market" | "limit") => {
     setOrderType(t);
     // Starts at the price that would sit at the front of its side of the book: the best bid for a buy, the best ask for a sale.
@@ -428,8 +428,8 @@ export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, 
         {docked ? (
           <QuoteStrip asset={asset} />
         ) : (
-          <div className="trade-price" title={`${formatPrice(asset.priceQu)} QU`}>
-            <span className="num">{compactPrice(asset.priceQu)}</span>
+          <div className="trade-price" title={`${formatPrice(livePrice(asset))} QU`}>
+            <span className="num">{compactPrice(livePrice(asset))}</span>
             <small>QU</small>
           </div>
         )}

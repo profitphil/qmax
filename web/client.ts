@@ -5,7 +5,7 @@ import type { ArbitrageResult, AssetItem, BookResponse, CandlesResponse, History
 export type { ArbitrageResult, AssetItem, BookResponse, CandlesResponse, HistoryResponse, QuoteResponse };
 
 export { shownName } from "../src/assetname.ts";
-export { livePrice } from "../src/liveprice.ts";
+export { lastTradeAge, livePrice } from "../src/liveprice.ts";
 
 import { BASE } from "./base.ts";
 import { usageSharingOn } from "./sharing.ts";

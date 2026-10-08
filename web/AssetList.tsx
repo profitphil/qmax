@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchAssetList, livePrice, searchAssets, shownName } from "./client.ts";
+import { fetchAssetList, lastTradeAge, livePrice, searchAssets, shownName } from "./client.ts";
 import { VolSelect, changeOf, useVolWindow, volLong, volumeOf } from "./volwin.tsx";
 import { defaultDir, sortAssets, spreadOf } from "../src/listsort.ts";
 import type { SortDir, SortKey } from "../src/listsort.ts";
@@ -590,7 +590,7 @@ export function AssetList({ mode = "list", show, page, selectedId, onDefault, on
                 </div>
 
                 <div className="cell price">
-                  <span className="val num" title={`${formatPrice(livePrice(a))} QU`}>{compactPrice(livePrice(a), settings.compactPrices)}</span>
+                  <span className="val num" title={`${formatPrice(livePrice(a))} QU${lastTradeAge(a) ? ` · last QX trade ${lastTradeAge(a)}` : ""}${a.lastPriceQu != null && a.priceQu !== a.lastPriceQu ? ` at ${formatPrice(a.lastPriceQu)} QU: an old trade, kept inside today's QX bid and ask` : ""}`}>{compactPrice(livePrice(a), settings.compactPrices)}</span>
                   <small>QU</small>
                 </div>
 

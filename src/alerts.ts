@@ -14,8 +14,7 @@ import type { ArbitrageResult } from "./apitypes.ts";
  *  - arbitrage: an arbitrage appears on one asset, or on any asset, that meets the owner's own arbitrage filters.
  *  - bigtrade: a single trade of at least N QU, on one asset or any, read from the live tape.
  *
- * The caveat to keep in mind everywhere: prices here are QMax's price for an asset (the QSwap pool price if there is a pool,
- * otherwise the best QX bid and ask averaged, or the only one there is), sampled when the service checks, not every tick. A price that spikes and falls back between two checks is not seen.
+ * The caveat to keep in mind everywhere: prices here are QMax's price for an asset (the price of its newest QX trade; with none, the middle of its best QX bid and ask), sampled when the service checks, not every tick. A price that spikes and falls back between two checks is not seen.
  */
 
 export const MAX_RULES = 10;

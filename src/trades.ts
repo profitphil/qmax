@@ -286,12 +286,19 @@ export class TradeIndex {
    * The newest trade's price (QU per unit: the close of the newest minute with trades, on whichever market traded last) and when that minute ended. Null when
    * the asset has no trades on record. The list shows it as the price whenever it is newer than the order books were read.
    */
-  last(key: string): { price: number; ms: number } | null {
+  /** The newest trade of an asset, and the market it was on: on `venue` only when one is named, otherwise on either (QX first, so QX wins a tie). */
+  last(key: string, venue?: Venue): { price: number; ms: number; venue: Venue } | null {
     const book = this.assets.get(key);
     if (!book) return null;
     let best: Hour | null = null;
-    for (const v of ["QX", "QSwap"] as const) for (const h of book[v].values()) if (!best || h.closeMs > best.closeMs) best = h;
-    return best && best.close > 0 ? { price: best.close, ms: best.closeMs } : null;
+    let on: Venue = "QX";
+    for (const v of venue ? [venue] : (["QX", "QSwap"] as const))
+      for (const h of book[v].values())
+        if (!best || h.closeMs > best.closeMs) {
+          best = h;
+          on = v;
+        }
+    return best && best.close > 0 ? { price: best.close, ms: best.closeMs, venue: on } : null;
   }
 
   /** Counts for a status line. `slots` is the number of minutes (per asset and venue) that had trades. */

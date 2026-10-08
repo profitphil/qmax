@@ -147,14 +147,14 @@ try {
         volumeCache = { at: now, map };
         return map;
       },
-      // The newest trade of each asset, for the list's live price: one cheap pass, kept for a few seconds.
+      // The newest QX trade of each asset: every asset trades on QX, and QX is where the price QMax shows comes from (a QSwap pool is only a reserve ratio and stays put when nobody trades against it; see `priceFromQx`). One cheap pass, kept for a few seconds.
       lasts() {
         const now = Date.now();
         if (lastCache && now - lastCache.at < 5_000) return lastCache.map;
         const map = new Map<string, { price: number; ms: number }>();
         for (const e of catalog.list()) {
           try {
-            const l = trades.last(activityKey(e.symbol, e.issuer));
+            const l = trades.last(activityKey(e.symbol, e.issuer), "QX");
             if (l) map.set(e.id.toUpperCase(), l);
           } catch {
             // an asset whose name cannot be keyed has no trades

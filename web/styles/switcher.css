@@ -22,6 +22,10 @@
 li.switch-none { display: block; color: var(--muted); cursor: default; padding: 12px 6px; }
 .switch-foot { margin: 0; padding: 0 4px 2px; font-size: 11px; color: var(--muted); }
 @media (max-width: 720px) {
+  /* On a phone the popup fits the screen: it hangs from the full-width header (the title sits a little way in, and a popup hung from it stuck out past the right edge, which let the phone slide the whole page sideways). */
+  .trade-head { position: relative; }
+  .switch { position: static; }
+  .switch-pop { left: 12px; right: 12px; width: auto; top: 42px; }
   .switch-name h2 { font-size: 20px; }
   .switch-list li { grid-template-columns: 14px minmax(0, 1fr) 70px 64px; }
   .switch-kind { display: none; }

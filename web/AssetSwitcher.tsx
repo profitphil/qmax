@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { shownName } from "./client.ts";
+import { livePrice, shownName } from "./client.ts";
 import type { AssetItem } from "./client.ts";
 import { useAssetCatalog } from "./catalog.ts";
 import { busiestIn, useVolWindow, volumeOf } from "./volwin.tsx";
@@ -65,7 +65,14 @@ export function AssetSwitcher({ current, onPick, onQubic, slash }: Props) {
 
   useEffect(() => setActive(0), [query, open]);
   useEffect(() => {
-    list.current?.children[active]?.scrollIntoView({ block: "nearest" });
+    // Keeps the highlighted row in view by moving the list only: scrollIntoView would also move every scrolling parent, the page included (on a phone that slid the page sideways).
+    const ul = list.current;
+    const li = ul?.children[active] as HTMLElement | undefined;
+    if (!ul || !li) return;
+    const l = li.getBoundingClientRect();
+    const u = ul.getBoundingClientRect();
+    if (l.top < u.top) ul.scrollTop -= u.top - l.top;
+    else if (l.bottom > u.bottom) ul.scrollTop += l.bottom - u.bottom;
   }, [active]);
 
   // Close on a click anywhere else.
@@ -142,7 +149,7 @@ export function AssetSwitcher({ current, onPick, onQubic, slash }: Props) {
                 {favs.has(a.id) && !query ? <Icon name="star" size={12} fill /> : <span className="switch-gap" />}
                 <b>{nameOf(a)}</b>
                 <span className="switch-kind">{isQu(a) ? "the coin" : a.category === "contract" ? "contract" : "token"}</span>
-                <span className="num switch-price">{isQu(a) ? "" : compactPrice(a.priceQu)}</span>
+                <span className="num switch-price">{isQu(a) ? "" : compactPrice(livePrice(a))}</span>
                 <span className="num switch-vol">{isQu(a) ? "" : volumeOf(a, win) ? compactPrice(volumeOf(a, win)) : "–"}</span>
               </li>
             ))}

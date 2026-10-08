@@ -25,6 +25,8 @@ export const CSP = [
   "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self' https://rpc.qubic.org https://relay.walletconnect.org wss://relay.walletconnect.org https://rpc.walletconnect.org https://verify.walletconnect.org https://verify.walletconnect.com https://pulse.walletconnect.org https://echo.walletconnect.com",
+  // WalletConnect's Verify page, which it loads in a hidden frame to vouch for this site's address (blocked, the connection link takes five seconds longer to appear).
+  "frame-src https://verify.walletconnect.org https://verify.walletconnect.com",
   "base-uri 'none'",
   "object-src 'none'",
   "form-action 'none'",
