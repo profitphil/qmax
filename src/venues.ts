@@ -20,7 +20,7 @@ export interface QxConfig {
    */
   buyerFeeRate: number;
   sellerFeeRate: number;
-  /** Flat QU for asset transfer / management-rights handling (QX transferFee = 100). */
+  /** Flat QU the venue takes on top of an order. QX takes none (the live adapter sets 0: see src/live.ts); the 100 QU transfer fee belongs to a management-rights move, a step of its own. */
   fixedCostQu: number;
 }
 

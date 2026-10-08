@@ -499,6 +499,8 @@ button.go { padding: 10px 14px; font-size: 13px; }
 .mtable.mine .cell.held, .mtable.mine .cell.cost, .mtable.mine .cell.worth, .mtable.mine .cell.pl { text-align: right; font-size: 13px; }
 .mtable.mine .cell.worth, .mtable.mine .cell.pl { display: grid; justify-items: end; line-height: 1.25; }
 .mtable.mine .cell small.usd, .mtable.mine .cell small.pct { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; }
+/* "only 12/30 sellable": the market cannot take the whole holding now, so the worth counts only the part it can */
+.mtable.mine .cell small.partial { display: block; font-size: 10.5px; font-weight: 600; white-space: nowrap; color: var(--warn); }
 .mtable.mine .cell.pl.up small.pct { color: var(--buy); } .mtable.mine .cell.pl.down small.pct { color: var(--sell); }
 .mtable.mine .cell.bought { text-align: right; font-size: 12px; color: var(--fg-2); display: grid; justify-items: end; }
 .mtable.mine .l3 .held { display: none; }
@@ -513,7 +515,7 @@ button.go { padding: 10px 14px; font-size: 13px; }
 @media (max-width: 720px) {
   .mtable.mine .cell.worth, .mtable.mine .cell.pl, .mtable.mine .cell.bought { display: inline; text-align: left; }
   .mtable.mine .cell.bought { display: inline; }
-  .mtable.mine .cell small.usd, .mtable.mine .cell small.pct { display: inline; margin-left: 4px; }
+  .mtable.mine .cell small.usd, .mtable.mine .cell small.pct, .mtable.mine .cell small.partial { display: inline; margin-left: 4px; }
   .pf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

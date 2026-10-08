@@ -1,12 +1,12 @@
 /**
- * What the chart gives everyone and what is part of Max (QMax Pro). The basics are free: candles and the line, the ranges, an automatic candle width (and an hour or a
- * day), volume, the 20-candle average, the linear axis, the market choice, a trend line and a horizontal line, fit, full screen, and a picture at screen size. The rest
- * (the other chart styles and candle widths, more indicators, epoch marks, filling gaps, the log and percent axes, the chart settings panel, bigger pictures, and
- * the other drawing tools) switch on with Max. A choice a person made while Max was on is kept, and simply not applied while it is off.
+ * What the chart gives everyone and what is part of Max (QMax Pro). The basics are free: candles and the line, the ranges, every candle width (automatic, 1, 5, 15 and 30
+ * minutes, 1 and 4 hours, a day), volume, the 20-candle average, the linear axis, the market choice, a trend line and a horizontal line, fit, full screen, and a picture at
+ * screen size. The rest (the other chart styles, more indicators, epoch marks, filling gaps, the log and percent axes, the chart settings panel, bigger pictures, and the
+ * other drawing tools) switch on with Max. A choice a person made while Max was on is kept, and simply not applied while it is off.
  */
 export const FREE_CHART = {
   types: ["candles", "line"],
-  intervals: ["auto", "1h", "1d"],
+  intervals: ["auto", "1m", "5m", "15m", "30m", "1h", "4h", "1d"],
   indicators: ["sma20"],
   scales: ["normal"],
   tools: ["cursor", "trend", "hline"],

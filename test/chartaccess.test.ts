@@ -12,7 +12,7 @@ test("with Max on, every choice applies as it was made", () => {
 test("with Max off, the choices outside the free set fall back to the basic ones, and the rest are left alone", () => {
   const e = entitled(chosen, false);
   assert.equal(e.type, "candles");
-  assert.equal(e.interval, "auto");
+  assert.equal(e.interval, "5m", "every candle width is free");
   assert.deepEqual(e.indicators, ["sma20"]);
   assert.equal(e.epochs, false);
   assert.equal(e.fill, false);
@@ -31,8 +31,7 @@ test("a free choice stays as chosen with Max off", () => {
 test("what is free: the basics only", () => {
   assert.ok(["candles", "line"].every(isFreeType));
   assert.ok(!["heikin", "bars", "area"].some(isFreeType));
-  assert.ok(["auto", "1h", "1d"].every(isFreeInterval));
-  assert.ok(!["1m", "5m", "15m", "30m", "4h"].some(isFreeInterval));
+  assert.ok(["auto", "1m", "5m", "15m", "30m", "1h", "4h", "1d"].every(isFreeInterval), "every candle width is free");
   assert.ok(isFreeIndicator("sma20"));
   assert.equal(INDICATORS.filter((i) => isFreeIndicator(i.id)).length, 1, "one indicator is free");
   assert.ok(isFreeScale("normal") && !isFreeScale("log") && !isFreeScale("percent"));

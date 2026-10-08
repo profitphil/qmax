@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { liquidate, liquidationRoutes, parseHoldings } from "../src/liquidation.ts";
+import { STILL_PRICING, combineLiquidation, inRuns, liquidate, liquidationRoutes, parseHoldings, quoteWhatFits, sellCapacity, sharedRead } from "../src/liquidation.ts";
+import { route } from "../src/router.ts";
+import { QswapVenue, QxVenue } from "../src/venues.ts";
+import type { Venue } from "../src/types.ts";
 import type { LiquidationDeps } from "../src/liquidation.ts";
 import { RouteError } from "../src/routes.ts";
 
@@ -137,4 +140,208 @@ test("only a few portfolios are priced at once; the rest are told to ask again i
   release();
   await Promise.all([a, b]);
   await ask(); // room again
+});
+
+// ---- a holding the buyers cannot take in full is priced for the part they can take (30 held, buyers for 12)
+
+const qxBids = (bids: [number, number][]) => new QxVenue({ asks: [], bids: bids.map(([price, qty]) => ({ price, qty })), buyerFeeRate: 0, sellerFeeRate: 0.003, fixedCostQu: 100, truncated: false });
+// a pool worth 10 billion QU, so a sale of a few units is worth far more than its flat 100,000 QU fee
+const pool = () => new QswapVenue({ reserveQu: 10_000_000_000, reserveAsset: 1000, swapFeeRate: 30, fixedCostQu: 100_000 });
+
+/** The real router, as the server wires it: a sale of `qty` priced across `venues`. */
+const routed = (venues: Venue[]): LiquidationDeps["quote"] => async (_asset, qty) => {
+  const plan = route(venues, "sell", qty);
+  return { filledQty: plan.filledQty, totalQu: plan.totalNetQu, averagePriceQu: Number.isFinite(plan.averagePrice) ? plan.averagePrice : null, route: plan.allocations.map((a) => ({ venue: a.venue })) };
+};
+
+test("the router alone prices nothing for 30 shares when buyers want only 12 (why a capacity-aware quote is needed)", async () => {
+  const venues = [qxBids([[100, 7], [99, 5]])];
+  const q = await routed(venues)("QTREAT", 30);
+  assert.equal(q.filledQty, 0);
+});
+
+test("with buyers for 12 of 30 shares, the 12 are priced and the holding is marked incomplete", async () => {
+  const venues = [qxBids([[100, 7], [99, 5]])];
+  const deps: LiquidationDeps = { quote: quoteWhatFits(routed(venues), async () => sellCapacity(venues)), midPrice: () => 100, now: () => 1 };
+  const r = await liquidate([{ asset: "QTREAT", qty: 30 }], deps);
+  const x = r.items[0];
+  assert.equal(x.qty, 30);
+  assert.equal(x.fillableQty, 12);
+  assert.equal(x.complete, false);
+  assert.equal(r.incomplete, 1);
+  // exactly what a sale of the 12 the buyers want brings (7 at 100 and 5 at 99, QX's fees and flat cost taken off), no more
+  assert.equal(x.proceedsQu, route(venues, "sell", 12).totalNetQu);
+  assert.ok(x.proceedsQu > 1000 && x.proceedsQu < 1195, String(x.proceedsQu));
+  assert.equal(x.midValueQu, 3000); // the whole holding at the mid price, for comparison
+  assert.deepEqual(x.venues, ["QX"]);
+  assert.equal(r.totalProceedsQu, x.proceedsQu);
+});
+
+test("buyers for the whole holding: nothing is cut short, and the whole-amount answer is used as it is", async () => {
+  const venues = [qxBids([[100, 40]])];
+  const calls: number[] = [];
+  const inner = routed(venues);
+  const quote = quoteWhatFits(async (a, q) => (calls.push(q), inner(a, q)), async () => sellCapacity(venues));
+  const q = await quote("X", 30);
+  assert.equal(q.filledQty, 30);
+  assert.deepEqual(calls, [30]); // one pricing, not two
+});
+
+test("a pool takes any amount, so a holding it backs is never marked incomplete", async () => {
+  const venues = [qxBids([[100, 12]]), pool()];
+  assert.equal(sellCapacity(venues), Infinity);
+  const r = await liquidate([{ asset: "P", qty: 30 }], { quote: quoteWhatFits(routed(venues), async () => sellCapacity(venues)), midPrice: () => 10_000_000, now: () => 1 });
+  assert.equal(r.items[0].complete, true);
+  assert.equal(r.items[0].fillableQty, 30);
+});
+
+test("no bids at all is still no buyers (nothing to price), and unknown capacity cuts nothing short", async () => {
+  assert.equal(sellCapacity([qxBids([])]), 0);
+  const none = [qxBids([])];
+  const r = await liquidate([{ asset: "N", qty: 30 }], { quote: quoteWhatFits(routed(none), async () => sellCapacity(none)), midPrice: () => 100, now: () => 1 });
+  assert.equal(r.items[0].fillableQty, 0);
+  assert.equal(r.items[0].proceedsQu, 0);
+  assert.equal(r.items[0].complete, false);
+  // an unknown kind of market, or a capacity that cannot be read, leaves the whole-amount answer alone
+  const odd = { name: "Odd", fixedCostQu: 0, variableNetQu: () => 0, quote: () => null } as Venue;
+  assert.equal(sellCapacity([odd]), Infinity);
+  const whole = { filledQty: 0, totalQu: 0, averagePriceQu: null, route: [] };
+  assert.deepEqual(await quoteWhatFits(async () => whole, async () => { throw new Error("rpc"); })("A", 5), whole);
+  assert.deepEqual(await quoteWhatFits(async () => whole, async () => null)("A", 5), whole);
+});
+
+// ---- pricing many holdings: a few at a time, and a passing failure is asked again
+
+const filled = (qty: number) => ({ filledQty: qty, totalQu: qty * 10, averagePriceQu: 10, route: [{ venue: "QX" }] });
+
+test("at most four holdings are priced at the same moment, and every one still gets its answer in order", async () => {
+  let running = 0;
+  let most = 0;
+  const deps: LiquidationDeps = {
+    quote: async (_a, qty) => {
+      running++;
+      most = Math.max(most, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      return filled(qty);
+    },
+    midPrice: () => 10,
+    now: () => 1,
+  };
+  const inputs = Array.from({ length: 25 }, (_, i) => ({ asset: `A${i}`, qty: i + 1 }));
+  const r = await liquidate(inputs, deps);
+  assert.ok(most <= 4, `${most} were priced at once`);
+  assert.ok(most > 1, "but not one at a time");
+  assert.deepEqual(r.items.map((x) => x.asset), inputs.map((x) => x.asset));
+  assert.ok(r.items.every((x, i) => x.complete && x.fillableQty === i + 1 && !x.error));
+  assert.equal((await liquidate(inputs, deps, { concurrency: 1 })).items.length, 25);
+});
+
+test("a holding that fails because the node is busy is asked again and priced; a lasting failure is not asked again", async () => {
+  const tries = new Map<string, number>();
+  const deps: LiquidationDeps = {
+    quote: async (asset, qty) => {
+      tries.set(asset, (tries.get(asset) ?? 0) + 1);
+      if (asset === "BUSY" && tries.get(asset)! <= 2) throw new Error("The Qubic node is busy (too many requests are waiting). Try again shortly.");
+      if (asset === "GONE") throw new RouteError(404, "Unknown asset 'GONE'");
+      return filled(qty);
+    },
+    midPrice: () => 10,
+    now: () => 1,
+  };
+  const r = await liquidate([{ asset: "BUSY", qty: 5 }, { asset: "GONE", qty: 5 }, { asset: "FINE", qty: 5 }], deps, { retryDelayMs: 1 });
+  const by = Object.fromEntries(r.items.map((x) => [x.asset, x]));
+  assert.equal(by.BUSY.complete, true, "priced on the third try");
+  assert.equal(by.BUSY.error, undefined);
+  assert.equal(tries.get("BUSY"), 3);
+  assert.match(by.GONE.error!, /Unknown asset/);
+  assert.equal(tries.get("GONE"), 1, "an unknown asset is not asked again");
+  assert.equal(tries.get("FINE"), 1);
+});
+
+test("a holding that keeps failing is reported with the reason after the retries, and does not spoil the rest", async () => {
+  let calls = 0;
+  const deps: LiquidationDeps = {
+    quote: async (asset, qty) => {
+      if (asset === "DOWN") {
+        calls++;
+        throw new Error("The Qubic node is busy (too many requests are waiting). Try again shortly.");
+      }
+      return filled(qty);
+    },
+    midPrice: () => 10,
+    now: () => 1,
+  };
+  const r = await liquidate([{ asset: "DOWN", qty: 3 }, { asset: "UP", qty: 3 }], deps, { retryDelayMs: 1, retries: 2 });
+  assert.equal(calls, 3, "the first try and two more");
+  assert.match(r.items[0].error!, /node is busy/);
+  assert.equal(r.items[1].complete, true);
+  assert.equal(r.totalProceedsQu, 30);
+});
+
+test("a portfolio is cut into runs in order, and an answer put together from runs has the same totals as one made whole", async () => {
+  assert.deepEqual(inRuns([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  assert.deepEqual(inRuns([], 8), []);
+  assert.deepEqual(inRuns([1, 2], 8), [[1, 2]]);
+  const deps: LiquidationDeps = { quote: async (_a, qty) => filled(qty), midPrice: () => 11, now: () => 5 };
+  const inputs = Array.from({ length: 10 }, (_, i) => ({ asset: `A${i}`, qty: i + 1 }));
+  const whole = await liquidate(inputs, deps);
+  const parts = await Promise.all(inRuns(inputs, 4).map((run) => liquidate(run, deps)));
+  const combined = combineLiquidation(parts.flatMap((p) => p.items), 5);
+  assert.deepEqual(combined, whole);
+  assert.equal(combined.totalProceedsQu, 550);
+});
+
+test("pricing that runs past its time budget hands back the holdings not yet started unpriced, with the reason that says to ask again", async () => {
+  const deps: LiquidationDeps = {
+    quote: async (_a, qty) => {
+      await new Promise((r) => setTimeout(r, 30));
+      return filled(qty);
+    },
+    midPrice: () => 10,
+    now: () => 1,
+  };
+  const inputs = Array.from({ length: 8 }, (_, i) => ({ asset: `S${i}`, qty: 2 }));
+  const r = await liquidate(inputs, deps, { concurrency: 1, budgetMs: 70 });
+  const priced = r.items.filter((x) => !x.error);
+  const left = r.items.filter((x) => x.error);
+  assert.ok(priced.length >= 1 && priced.length < 8, `${priced.length} priced`);
+  assert.ok(left.every((x) => x.error === STILL_PRICING && x.fillableQty === 0 && !x.complete));
+  assert.deepEqual(r.items.map((x) => x.asset), inputs.map((x) => x.asset), "still in order");
+  assert.equal(r.items.length, 8);
+});
+
+test("a market read is kept and shared for a while: two wallets holding the same asset make one reading; failures and unknown assets are not kept", async () => {
+  let clock = 1000;
+  const reads: string[] = [];
+  const read = sharedRead<string>(
+    async (asset) => {
+      reads.push(asset);
+      if (asset === "BOOM") throw new Error("node busy");
+      return asset === "NOPE" ? null : `book of ${asset}`;
+    },
+    { ttlMs: 60_000, max: 3, now: () => clock },
+  );
+  const [a, b] = await Promise.all([read("qmine"), read("QMINE")]); // two at once, any case
+  assert.equal(a, "book of qmine");
+  assert.equal(b, a);
+  assert.equal(reads.length, 1);
+  clock += 30_000;
+  await read("QMINE");
+  assert.equal(reads.length, 1, "still kept after half a minute");
+  clock += 31_000;
+  await read("QMINE");
+  assert.equal(reads.length, 2, "read again once the time is up");
+  await assert.rejects(read("BOOM"), /node busy/);
+  await assert.rejects(read("BOOM"), /node busy/);
+  assert.equal(reads.filter((r) => r === "BOOM").length, 2, "a failure is asked for again");
+  assert.equal(await read("NOPE"), null);
+  await read("NOPE");
+  assert.equal(reads.filter((r) => r === "NOPE").length, 2, "an unknown asset is asked for again");
+  for (const x of ["A", "B", "C", "D"]) await read(x);
+  const before = reads.length;
+  await read("D");
+  assert.equal(reads.length, before, "the newest are still held");
+  await read("A");
+  assert.equal(reads.length, before + 1, "the oldest went first once more than max were held");
 });

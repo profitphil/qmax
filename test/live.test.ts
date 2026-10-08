@@ -57,7 +57,7 @@ test("live adapter reads fees, pages the QX book and parses the pool", async () 
   assert.equal(calls.filter((c) => c === "1:2").length, 2); // second page fetched
   const qx = venues[0].quote("buy", 2565)!; // 256*10 + 5 shares needs the second page
   assert.ok(qx);
-  assert.equal(venues[0].quote("sell", 100)!.fixedCostQu, 100);
+  assert.equal(venues[0].quote("sell", 100)!.fixedCostQu, 0, "QX takes no flat fee on an order");
   const plan = route(venues, "buy", 500);
   assert.ok(plan.filledQty === 500);
 });
@@ -84,4 +84,28 @@ test("RPC failures are retried then reported", async () => {
   const rpc = new QubicRpc({ retries: 2, fetch: (async () => (n++, { ok: false, status: 503 })) as never });
   await assert.rejects(rpc.query(1, 1), /unavailable/);
   assert.equal(n, 3);
+});
+
+test("the contracts' fee tables are read once for every asset, not once per asset (two of the five requests a market read made)", async () => {
+  const { rpc, calls } = mockRpc({ asks: [[order(100, 10)]] });
+  const data = new LiveMarketData([{ symbol: "CFB", issuer: ISSUER }, { symbol: "QDOGE", issuer: ISSUER }, { symbol: "QMINE", issuer: ISSUER }], { rpc, cacheMs: 0 });
+  await Promise.all(["CFB", "QDOGE", "QMINE"].map((s) => data.venues(s)));
+  await data.venues("CFB"); // and again later: still the one reading
+  assert.equal(calls.filter((c) => c === "1:1").length, 1, "QX fees");
+  assert.equal(calls.filter((c) => c === "13:1").length, 1, "QSwap fees");
+  assert.equal(calls.filter((c) => c === "1:2").length, 4, "each market read still reads its own asks");
+  assert.equal(calls.filter((c) => c === "13:2").length, 4, "and its own pool");
+});
+
+test("a one-share QX buy costs the share's price, not the price plus a flat 100 QU (the contract takes no flat fee on an order)", async () => {
+  // asks: 1 share at 24 QU. QX's fee comes out of the seller's proceeds, so the buyer pays 24.
+  const { rpc } = mockRpc({ asks: [[order(24, 5)]], poolExists: false });
+  const data = new LiveMarketData([{ symbol: "QDOGE", issuer: ISSUER }], { rpc });
+  const venues = (await data.venues("QDOGE"))!;
+  const plan = route(venues, "buy", 1);
+  assert.equal(plan.filledQty, 1);
+  assert.equal(plan.totalNetQu, 24);
+  assert.equal(plan.averagePrice, 24);
+  assert.deepEqual(plan.warnings, [], "no 'fees are 417% of this trade' warning");
+  assert.equal(plan.allocations[0].quote.fixedCostQu, 0);
 });

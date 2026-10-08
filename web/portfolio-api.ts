@@ -5,14 +5,38 @@ import { fetchLedger } from "./ledger-api.ts";
 import type { Ledger } from "./ledger-api.ts";
 import { buildPortfolio } from "../src/portfolio.ts";
 import type { HoldingIn } from "../src/portfolio.ts";
-import type { LiquidationResult } from "../src/liquidation.ts";
+import { combineLiquidation, inRuns } from "../src/liquidation.ts";
+import type { LiquidationItem, LiquidationResult } from "../src/liquidation.ts";
 
 /** What the holdings would fetch if sold now (the server runs each through the router a sale uses). */
 export async function fetchLiquidation(holdings: { asset: string; qty: number }[], signal?: AbortSignal): Promise<LiquidationResult> {
   const res = await fetch(`${BASE}/v1/liquidation`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ holdings }), signal });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `API ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(body.error ?? `API ${res.status}`), { status: res.status, retryAfterSec: typeof body.retryAfterSec === "number" ? body.retryAfterSec : undefined });
   return body as LiquidationResult;
+}
+
+/**
+ * How many holdings are priced in one request. Each holding is priced by reading its market live and the node answers a few requests a second, so a wallet's whole portfolio in one
+ * request can run past the 60 seconds the proxy allows (and then nothing comes back). A few at a time, each answer is quick, and the rows fill in as the parts arrive.
+ */
+const RUN_SIZE = 8;
+
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** One run of holdings, asked again a few times when the server is busy with other portfolios (503) or the answer was lost on the way; a refusal that will not change is not repeated. */
+async function fetchRun(run: { asset: string; qty: number }[], signal?: AbortSignal): Promise<LiquidationResult> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchLiquidation(run, signal);
+    } catch (e) {
+      const err = e as { name?: string; status?: number; retryAfterSec?: number };
+      if (err.name === "AbortError" || signal?.aborted) throw e;
+      const passing = err.status === undefined || err.status === 503 || err.status === 429 || err.status >= 500;
+      if (!passing || attempt >= 3) throw e;
+      await pause(Math.min(15, err.retryAfterSec ?? 3 * (attempt + 1)) * 1000);
+    }
+  }
 }
 
 const LEDGER_DAYS = 365;
@@ -25,6 +49,13 @@ const WORTH_FRESH_MS = 15 * 60_000;
 const LEDGER_KEEP_MS = 15 * 60_000;
 /** After this many busy answers in a row the page stops asking by itself (the button asks again). */
 const MAX_AUTO_RETRIES = 6;
+/**
+ * When an answer arrives with some holdings that could not be priced for a passing reason (the node was busy), the page asks again for them this many times, a few seconds
+ * apart, instead of keeping the failures for the fifteen minutes a good pricing is kept. (The server keeps the holdings it did price, so asking again costs little.)
+ */
+const MAX_ITEM_RETRIES = 3;
+/** A reason that asking again will not change. */
+const lastingError = (message: string) => /unknown asset/i.test(message);
 const kept = new Map<string, { at: number; ledger: Ledger }>();
 /** The last pricing of each wallet's holdings (and which holdings it was for), kept for as long as the page is open, so coming back to My assets shows it at once. */
 const keptWorth = new Map<string, { at: number; signature: string; result: LiquidationResult }>();
@@ -71,29 +102,51 @@ export function usePortfolio({ walletId, assets, owned, enabled }: { walletId: s
     let lastAt = same?.at ?? 0;
     const ctl = new AbortController();
     let failures = 0;
+    let itemTries = 0;
     let again: ReturnType<typeof setTimeout> | undefined;
-    const load = (): Promise<void> => {
+    /**
+     * Prices `only` (every holding when not given) a run at a time, putting each run's answers over what is shown (the last pricing of these holdings), so rows already priced do not
+     * blink out while the new pricing arrives in parts and a new row fills in as soon as its run is back.
+     */
+    const load = async (only?: Set<string>): Promise<void> => {
       setRefreshingWorth(true);
-      return fetchLiquidation(holdingsRef.current.map((h) => ({ asset: h.id, qty: h.qty })), ctl.signal)
-        .then((r) => {
-          failures = 0;
-          lastAt = Date.now();
-          keptWorth.set(walletId, { at: lastAt, signature, result: r });
-          setLiquidation(r);
-          setPricedAt(lastAt);
-          setLiqError("");
-          setRefreshingWorth(false);
-        })
-        .catch((e) => {
-          if (e.name === "AbortError") return;
-          setLiqError(e instanceof Error ? e.message : String(e));
-          setRefreshingWorth(false);
-          // The server is pricing other portfolios (or the market data is busy): ask again in a few seconds, a few times.
-          if (++failures <= 3) again = setTimeout(() => void load(), 5000 * failures);
-        });
+      try {
+        const all = holdingsRef.current.map((h) => ({ asset: h.id, qty: h.qty }));
+        const want = only ? all.filter((h) => only.has(h.asset.toUpperCase())) : all;
+        const kept = keptWorth.get(walletId);
+        const byAsset = new Map<string, LiquidationItem>((kept?.signature === signature ? kept.result.items : []).map((i) => [i.asset.toUpperCase(), i]));
+        const put = (): LiquidationResult => combineLiquidation(all.map((h) => byAsset.get(h.asset.toUpperCase())).filter((i): i is LiquidationItem => !!i), Date.now());
+        for (const run of inRuns(want, RUN_SIZE)) {
+          const r = await fetchRun(run, ctl.signal);
+          for (const i of r.items) byAsset.set(i.asset.toUpperCase(), i);
+          setLiquidation(put());
+        }
+        failures = 0;
+        lastAt = Date.now();
+        const result = put();
+        keptWorth.set(walletId, { at: lastAt, signature, result });
+        setLiquidation(result);
+        setPricedAt(lastAt);
+        setLiqError("");
+        setRefreshingWorth(false);
+        // Some holdings could not be priced just now (the node was busy): ask again shortly for those only (the rest stay as they are).
+        const failed = result.items.filter((i) => i.error && !lastingError(i.error));
+        if (failed.length && itemTries < MAX_ITEM_RETRIES) {
+          itemTries++;
+          clearTimeout(again);
+          again = setTimeout(() => void load(new Set(failed.map((i) => i.asset.toUpperCase()))), 4000 * itemTries);
+        } else if (!result.items.some((i) => i.error)) itemTries = 0;
+      } catch (e) {
+        if ((e as { name?: string }).name === "AbortError") return;
+        setLiqError(e instanceof Error ? e.message : String(e));
+        setRefreshingWorth(false);
+        // The server is pricing other portfolios (or the market data is busy): ask again in a few seconds, a few times.
+        if (++failures <= 3) again = setTimeout(() => void load(), 5000 * failures);
+      }
     };
     priceNow.current = () => {
       clearTimeout(again);
+      itemTries = 0;
       void load();
     };
     if (!same || Date.now() - same.at >= WORTH_FRESH_MS) void load();

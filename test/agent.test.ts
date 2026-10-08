@@ -62,11 +62,19 @@ test("a seed signs transactions that verify, and a changed transaction does not"
   const sent: Uint8Array[] = [];
   const chain: StepChain = { tick: async () => 5000, broadcast: async (b) => (sent.push(b), randomTxId()), wait: async () => ({ included: true, moneyFlew: true }) };
   const step: TxStep = { id: "t", kind: "qx-bid", description: "t", to: { contractIndex: 1 }, inputType: 6, amountQu: 300, payload: new Uint8Array(56).fill(9) };
-  const { runSteps } = await import("../web/exec/run.ts");
-  assert.equal(await runSteps(signer.identity, [step], (tx) => signer.sign(tx), () => {}, undefined, chain), true);
+  const { runSteps, TICK_OFFSET, INSTANT_SIGNER_TICK_OFFSET } = await import("../web/exec/run.ts");
+  // a signer that answers at once (an agent's own key) asks for the short lead
+  assert.equal(await runSteps(signer.identity, [step], (tx) => signer.sign(tx), () => {}, undefined, chain, undefined, INSTANT_SIGNER_TICK_OFFSET), true);
   assert.equal(sent.length, 1);
   const tx = decodeTx(sent[0]);
   assert.deepEqual([tx.inputType, tx.amount, tx.tick, tx.dest[0], bytesToHex(tx.source)], [6, 300, 5020, 1, bytesToHex(keys.publicKey)]);
+  // and by default the lead is the one a person needs to open a wallet app and approve: 50 ticks, about 33 seconds
+  assert.equal(TICK_OFFSET, 50);
+  sent.length = 0;
+  assert.equal(await runSteps(signer.identity, [step], (tx) => signer.sign(tx), () => {}, undefined, chain), true);
+  assert.equal(decodeTx(sent[0]).tick, 5050);
+  sent.length = 0;
+  assert.equal(await runSteps(signer.identity, [step], (tx) => signer.sign(tx), () => {}, undefined, chain, undefined, INSTANT_SIGNER_TICK_OFFSET), true);
   assert.equal(await signedBy(sent[0], keys.publicKey), true);
   const tampered = new Uint8Array(sent[0]);
   tampered[70] ^= 1; // change the amount
@@ -132,6 +140,8 @@ test("the whole agent loop: it hits the free limit, signs a real QPAYHUB.Pay wit
   assert.equal(await signedBy(sent[0], keys.publicKey), true); // signed by the agent's own key
   assert.deepEqual([tx.dest[0], tx.inputType, tx.amount, tx.payload.length], [29, 1, 10_000, 72]); // QPAYHUB.Pay, the advertised price
   assert.equal(bytesToHex(tx.payload.slice(32, 64)), bytesToHex(resourceTag(SESSION_RESOURCE_ID)));
+  // an agent signs at once, so it keeps the short lead (20 ticks) and its payment confirms sooner than a person's would (50)
+  assert.equal(tx.tick, net.state.tick + 20);
 
   // and it has a session now: more calls, no more payments
   for (let i = 0; i < 6; i++) await client.quote({ side: "buy", asset: srv.asset, qty: 100_000 });

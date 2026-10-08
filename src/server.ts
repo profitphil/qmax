@@ -37,7 +37,7 @@ import { QubicRpc } from "./rpc.ts";
 import { PriceFeed, defaultSources } from "../bot/price.ts";
 import { QubicPrice, qubicRoutes } from "./qubicprice.ts";
 import { plansRoutes } from "./plans.ts";
-import { cachedQuote, liquidationRoutes } from "./liquidation.ts";
+import { cachedQuote, liquidationRoutes, quoteWhatFits, sellCapacity, sharedRead } from "./liquidation.ts";
 import { UsedLedger, X402Gate, loadSecrets, rpcChain } from "./x402.ts";
 
 /** A number from the environment, refused (not quietly turned into NaN, which disables whatever it limits) if it is not a number in range. */
@@ -264,14 +264,24 @@ try {
   const md: MarketData = data;
   const quoteData: MarketData = { assets: () => md.assets(), venues: (a) => md.venues(a), assetInfo: md.assetInfo?.bind(md) };
   // What holdings would fetch if sold now: each one run through the same router a real sale uses (the depth of the book and pool, every fee), in-process.
+  // A portfolio's worth does not need books fresher than a minute, so the markets it reads are kept for LIQUIDATION_BOOK_SECONDS (default 60) and shared by every wallet that
+  // holds the same asset: reading them is most of what the public node is asked, and it answers 429 when asked too much.
+  const worthData: MarketData = { ...quoteData, venues: sharedRead((a) => quoteData.venues(a), { ttlMs: envNumber("LIQUIDATION_BOOK_SECONDS", 60, 0, 600) * 1000 }) };
   featureRoutes.push(
     ...liquidationRoutes({
       // Shared for two minutes by default (LIQUIDATION_CACHE_SECONDS) between everyone who asks (the same holding of the same asset is the same sale), so many people looking at their portfolios cost little more than one. Each pricing reads the live market and the public node limits how often that may be asked, so this also keeps repeated refreshes from hitting that limit.
+      // A holding the buyers cannot take in full is priced for the part they can take (a holding of 30 with buyers for 12 is worth its 12), not as nothing.
       quote: cachedQuote(
-        async (asset, qty) => {
-          const q = await buildQuote(quoteData, { side: "sell", asset, qty, slippageBps: 0 });
-          return { filledQty: q.filledQty, totalQu: q.totalQu, averagePriceQu: q.averagePriceQu, route: q.route.map((r) => ({ venue: r.venue })) };
-        },
+        quoteWhatFits(
+          async (asset, qty) => {
+            const q = await buildQuote(worthData, { side: "sell", asset, qty, slippageBps: 0 });
+            return { filledQty: q.filledQty, totalQu: q.totalQu, averagePriceQu: q.averagePriceQu, route: q.route.map((r) => ({ venue: r.venue })) };
+          },
+          async (asset) => {
+            const venues = await worthData.venues(asset);
+            return venues ? sellCapacity(venues) : null;
+          },
+        ),
         { ttlMs: envNumber("LIQUIDATION_CACHE_SECONDS", 120, 5, 3600) * 1000 },
       ),
       midPrice: (asset) => catalog.list().find((e) => e.id.toUpperCase() === asset.toUpperCase())?.priceQu ?? null,

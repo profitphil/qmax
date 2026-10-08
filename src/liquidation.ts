@@ -1,5 +1,7 @@
 import { RouteError, plainNumber } from "./routes.ts";
 import type { Route } from "./routes.ts";
+import type { Venue } from "./types.ts";
+import { QxVenue } from "./venues.ts";
 
 /**
  * What a wallet's holdings would really fetch if they were sold now: not units times the last price, but each asset's whole holding run through the
@@ -49,13 +51,67 @@ export interface LiquidationDeps {
   now?: () => number;
 }
 
-export async function liquidate(inputs: LiquidationInput[], deps: LiquidationDeps): Promise<LiquidationResult> {
-  const items = await Promise.all(
-    inputs.map(async (i): Promise<LiquidationItem> => {
+/** How many holdings are priced at the same time, and how often one that failed for a passing reason is asked again (and how long it waits first). */
+export interface LiquidationPacing {
+  concurrency?: number;
+  retries?: number;
+  retryDelayMs?: number;
+  /**
+   * How long pricing may go on before the holdings not yet started are handed back unpriced (with a reason that says to ask again), so an answer comes back inside the proxy's
+   * 60-second limit even for a very large portfolio. The ones already priced are kept by the server for a while, so asking again prices the rest. Default 40,000.
+   */
+  budgetMs?: number;
+}
+
+/** A reason that will not change by asking again (the asset is not known), against a passing one (the node is busy, a request timed out). */
+const lasting = (e: unknown): boolean => e instanceof RouteError && e.status === 404;
+
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Runs `fn` over `list` with at most `limit` running at once, keeping the order of the answers. */
+async function mapLimit<T, R>(list: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(list.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, list.length)) }, async () => {
+      while (next < list.length) {
+        const i = next++;
+        out[i] = await fn(list[i]);
+      }
+    }),
+  );
+  return out;
+}
+
+/**
+ * Each holding is priced by reading its market live, and the node answers a limited number of requests a second, so pricing every holding at the same moment queues hundreds of
+ * requests and the ones at the back are refused as "node busy" (a wallet with 25 holdings lost about half of them this way, and the page kept the failures). So only a few are priced
+ * at a time, and one that fails for a passing reason is asked again a couple of times before it is reported as failed.
+ */
+export async function liquidate(inputs: LiquidationInput[], deps: LiquidationDeps, pacing: LiquidationPacing = {}): Promise<LiquidationResult> {
+  const retries = pacing.retries ?? 2;
+  const retryDelayMs = pacing.retryDelayMs ?? 1500;
+  const quote = async (asset: string, qty: number) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await deps.quote(asset, qty);
+      } catch (e) {
+        if (attempt >= retries || lasting(e)) throw e;
+        await wait(retryDelayMs * (attempt + 1));
+      }
+    }
+  };
+  const startedAt = Date.now();
+  const budgetMs = pacing.budgetMs ?? 40_000;
+  const items = await mapLimit(
+    inputs,
+    pacing.concurrency ?? 4,
+    async (i): Promise<LiquidationItem> => {
       const mid = deps.midPrice(i.asset);
       const midValueQu = mid !== null && mid > 0 ? mid * i.qty : null;
+      if (Date.now() - startedAt > budgetMs) return { asset: i.asset, qty: i.qty, fillableQty: 0, proceedsQu: 0, avgPriceQu: null, midValueQu, haircutPct: null, venues: [], complete: false, error: STILL_PRICING };
       try {
-        const q = await deps.quote(i.asset, i.qty);
+        const q = await quote(i.asset, i.qty);
         const fillableQty = Math.max(0, Math.min(i.qty, q.filledQty));
         const proceedsQu = Math.max(0, q.totalQu);
         // The haircut is measured on what was sold: the mid value of the filled part, not of the whole holding.
@@ -74,14 +130,91 @@ export async function liquidate(inputs: LiquidationInput[], deps: LiquidationDep
       } catch (e) {
         return { asset: i.asset, qty: i.qty, fillableQty: 0, proceedsQu: 0, avgPriceQu: null, midValueQu, haircutPct: null, venues: [], complete: false, error: e instanceof Error ? e.message : String(e) };
       }
-    }),
+    },
   );
+  return combineLiquidation(items, (deps.now ?? Date.now)());
+}
+
+/** The reason given for a holding that was not priced because the answer had to go back first. A page that sees it asks again for that holding. */
+export const STILL_PRICING = "QMax is still pricing this one: asking again.";
+
+/** The answer for a list of holdings' items: their totals and how many could not be sold in full. (Also how a page puts together an answer it fetched in parts.) */
+export function combineLiquidation(items: LiquidationItem[], at: number): LiquidationResult {
   return {
     items,
     totalProceedsQu: items.reduce((s, x) => s + x.proceedsQu, 0),
     totalMidQu: items.reduce((s, x) => s + (x.midValueQu ?? 0), 0),
     incomplete: items.filter((x) => !x.complete).length,
-    at: (deps.now ?? Date.now)(),
+    at,
+  };
+}
+
+/** A list cut into runs of at most `size`, keeping the order (a portfolio is priced a few holdings at a time, so no one request runs long). */
+export function inRuns<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += Math.max(1, size)) out.push(list.slice(i, i + Math.max(1, size)));
+  return out;
+}
+
+/**
+ * The most units of an asset the markets could take in a sale now. A QSwap pool takes any amount (the price only gets worse), so with a pool the answer is unlimited; with QX alone
+ * it is the units the standing bids ask for. A market of any other kind is not known, and counts as unlimited too, so nothing is cut short on a guess.
+ */
+export function sellCapacity(venues: Venue[]): number {
+  let total = 0;
+  for (const v of venues) {
+    if (!(v instanceof QxVenue)) return Infinity;
+    total += v.depth("sell");
+  }
+  return total;
+}
+
+/**
+ * A quote that does not give up on an amount the market cannot take in full. The router is all or nothing (it fills the whole order or says there is not enough depth), so a holding
+ * of 30 shares with buyers for 12 was priced as nothing. When the whole amount does not fill and the market can take part of it, this prices the part it can take (`capacity` says
+ * how many units that is): the holding is then worth what its sellable units bring, and `liquidate` marks it incomplete.
+ */
+export function quoteWhatFits(quote: LiquidationDeps["quote"], capacity: (asset: string) => Promise<number | null>): LiquidationDeps["quote"] {
+  return async (asset, qty) => {
+    const full = await quote(asset, qty);
+    if (full.filledQty >= qty) return full;
+    let most = Infinity;
+    try {
+      most = Math.floor((await capacity(asset)) ?? Infinity);
+    } catch {
+      return full; // the capacity could not be read: the whole-amount answer stands
+    }
+    if (!(most > 0) || most >= qty) return full;
+    const part = await quote(asset, most);
+    return part.filledQty > 0 ? part : full;
+  };
+}
+
+/**
+ * `read` for an asset, kept for `ttlMs` and shared by everyone who asks meanwhile (two asking at once make one read). Pricing a portfolio reads each holding's market live, which
+ * is most of what the public node is asked, and a portfolio's worth does not need books fresher than a minute, so wallets that hold the same asset share one reading of it.
+ * A failure, and an answer of null (an unknown asset), are not kept. The oldest go first once `max` are held.
+ */
+export function sharedRead<T>(read: (asset: string) => Promise<T | null>, o: { ttlMs: number; max?: number; now?: () => number }): (asset: string) => Promise<T | null> {
+  const now = o.now ?? Date.now;
+  const max = o.max ?? 500;
+  const kept = new Map<string, { at: number; value: Promise<T | null> }>();
+  return (asset) => {
+    const key = asset.toUpperCase();
+    const hit = kept.get(key);
+    if (hit && now() - hit.at < o.ttlMs) return hit.value;
+    const value = read(asset);
+    kept.set(key, { at: now(), value });
+    value.then(
+      (v) => {
+        if (v === null && kept.get(key)?.value === value) kept.delete(key);
+      },
+      () => {
+        if (kept.get(key)?.value === value) kept.delete(key);
+      },
+    );
+    while (kept.size > max) kept.delete(kept.keys().next().value as string);
+    return value;
   };
 }
 

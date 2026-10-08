@@ -15,7 +15,7 @@ import type { TradeEnv, TradeResult } from "../src/trade.ts";
 import { QPAYHUB_IDENTITY, resourceTag } from "../src/x402.ts";
 import { PAYWALL } from "../src/config.ts";
 import { fetchFees, fetchOpenOrders, fetchSnapshot } from "../web/exec/chain.ts";
-import { liveChain, runSteps } from "../web/exec/run.ts";
+import { INSTANT_SIGNER_TICK_OFFSET, liveChain, runSteps } from "../web/exec/run.ts";
 import type { StepChain, StepState } from "../web/exec/run.ts";
 import type { QMaxClient } from "./client.ts";
 import { X402Error } from "./x402.ts";
@@ -87,6 +87,8 @@ export function contractPayer(signer: Signer, opts: { chain?: StepChain; onState
         },
         undefined,
         opts.chain,
+        undefined,
+        INSTANT_SIGNER_TICK_OFFSET,
       );
       if (!ok || !txId) throw new X402Error(`The payment did not go through: ${error || "unknown error"}`, "pay_failed", sentTx ? { txId: sentTx } : {});
       if (!moneyFlew) throw new X402Error("The payment was recorded but no money moved. Does the wallet have enough QU?", "pay_no_money", { txId });
@@ -234,7 +236,7 @@ export async function agentTrade(o: AgentTradeOptions): Promise<TradeResult & { 
     snapshot: fetchSnapshot,
     fees: fetchFees,
     openOrders: fetchOpenOrders,
-    run: (wallet, steps, sign, onState) => runSteps(wallet, steps, sign as never, onState, undefined, o.chain ?? liveChain),
+    run: (wallet, steps, sign, onState) => runSteps(wallet, steps, sign as never, onState, undefined, o.chain ?? liveChain, undefined, INSTANT_SIGNER_TICK_OFFSET),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     ...o.env,
   };

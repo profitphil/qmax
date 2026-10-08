@@ -1,3 +1,6 @@
+
+/** How long a contract's fee table is kept before it is read again. */
+const FEE_TABLE_KEEP_MS = 5 * 60_000;
 import { fetchTransferFees } from "./fees.ts";
 import { AssetCatalog } from "./catalog.ts";
 import type { Category } from "./catalog.ts";
@@ -110,6 +113,23 @@ export class LiveMarketData implements MarketData {
     };
   }
 
+  private feeReads = new Map<string, { at: number; read: Promise<Uint8Array> }>();
+  /**
+   * A contract's fee table: the same for every asset and changing only when the contract does, so one read serves every market read for a few minutes (it was read once per
+   * asset, two of the five requests a market read makes). A failed read is not kept.
+   */
+  private feeTable(index: number, fn: number): Promise<Uint8Array> {
+    const key = `${index}:${fn}`;
+    const hit = this.feeReads.get(key);
+    if (hit && Date.now() - hit.at < FEE_TABLE_KEEP_MS) return hit.read;
+    const read = this.rpc.query(index, fn);
+    this.feeReads.set(key, { at: Date.now(), read });
+    read.catch(() => {
+      if (this.feeReads.get(key)?.read === read) this.feeReads.delete(key);
+    });
+    return read;
+  }
+
   private async load(asset: AssetConfig): Promise<Venue[]> {
     const [qx, qswap] = await Promise.all([this.loadQx(asset), this.loadQswap(asset)]);
     const list: (Venue | null)[] = [qx, qswap];
@@ -126,13 +146,12 @@ export class LiveMarketData implements MarketData {
 
   private async loadQx(asset: AssetConfig): Promise<QxVenue | null> {
     const [feesRaw, asks, bids] = await Promise.all([
-      this.rpc.query(QX_INDEX, QX_FN.fees),
+      this.feeTable(QX_INDEX, QX_FN.fees),
       this.fetchBook(asset, QX_FN.assetAsks),
       this.fetchBook(asset, QX_FN.assetBids),
     ]);
     const fees = structReader(feesRaw);
     if (fees.length < 12) throw new Error("Unexpected QX Fees response");
-    const transferFee = fees.u32(4);
     const tradeFee = fees.u32(8); // billionths
     if (!asks.levels.length && !bids.levels.length) return null;
 
@@ -141,7 +160,11 @@ export class LiveMarketData implements MarketData {
       bids: bids.levels,
       buyerFeeRate: 0, // Qx.h deducts the trade fee from the seller's QU proceeds
       sellerFeeRate: tradeFee / 1e9,
-      fixedCostQu: transferFee,
+      // QX takes no flat fee on an order: a bid attaches exactly price x quantity and a fill never costs more than that (a QMINE bid of 1,303 at 3,989 sent 5,197,667 QU and filled for
+      // exactly that), and an ask attaches nothing; the 0.3% comes out of the seller's proceeds. The 100 QU "transfer fee" is charged only when management rights are moved from one
+      // contract to the other, and that is a step of its own (a rights step in exec.ts), not part of the order. It was once added to every QX quote, so a 1 QDOGE buy showed 124 QU
+      // for a 24 QU fill. (QSwap's flat fee is real: see the ledger.)
+      fixedCostQu: 0,
       truncated: asks.truncated || bids.truncated,
     };
     return new QxVenue(cfg);
@@ -176,7 +199,7 @@ export class LiveMarketData implements MarketData {
 
   private async loadQswap(asset: AssetConfig): Promise<QswapVenue | null> {
     const [feesRaw, poolRaw] = await Promise.all([
-      this.rpc.query(QSWAP_INDEX, QSWAP_FN.fees),
+      this.feeTable(QSWAP_INDEX, QSWAP_FN.fees),
       this.rpc.query(QSWAP_INDEX, QSWAP_FN.poolState, this.assetInput(asset, 0).bytes),
     ]);
     const fees = structReader(feesRaw);

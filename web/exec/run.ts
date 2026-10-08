@@ -1,13 +1,20 @@
 import { DynamicPayload } from "@qubic-lib/qubic-ts-library/dist/qubic-types/DynamicPayload";
 import { QubicTransaction } from "@qubic-lib/qubic-ts-library/dist/qubic-types/QubicTransaction";
 import { QubicHelper } from "@qubic-lib/qubic-ts-library/dist/qubicHelper";
+import { stepFailure } from "../../src/errtext.ts";
 import type { TxStep } from "../../src/exec.ts";
 import { broadcast, fetchTick, waitForTx } from "./chain.ts";
 
 const helper = new QubicHelper();
 
-/** Ticks of lead time. WalletConnect signing is slow (user opens the wallet app), so leave room. */
-const TICK_OFFSET = 20;
+/**
+ * Ticks of lead time between now and the tick a transaction is set to run at. Qubic ticks about one and a half times a second, so this is about 33 seconds for a person to see the
+ * request, open the wallet app and approve it: a wallet answers "Tick value is Expired" once the tick has passed, and at 20 ticks (about 13 seconds) most people on a phone missed
+ * it. The transaction runs at exactly this tick, so a longer lead also means a longer wait for it to confirm.
+ */
+export const TICK_OFFSET = 50;
+/** The lead for a signer that answers at once (an agent signing with its own key): nobody has to open anything, so a short lead confirms sooner. */
+export const INSTANT_SIGNER_TICK_OFFSET = 20;
 
 /** What sending a transaction needs from the network. The default is the public Qubic RPC; tests and other setups can supply their own. */
 export interface StepChain {
@@ -72,13 +79,15 @@ export async function runSteps(
   chain: StepChain = liveChain,
   /** Aborted when the window that started this goes away (closed, navigated, crashed): nothing further is signed or sent after that. */
   signal?: AbortSignal,
+  /** Ticks of lead time: the default is for a person approving in a wallet; a signer that answers at once passes INSTANT_SIGNER_TICK_OFFSET. */
+  tickOffset: number = TICK_OFFSET,
 ): Promise<boolean> {
   const stopped = () => new Error("Stopped: the window was closed before this step was sent. Nothing more will be signed.");
   for (const step of steps) {
     try {
       if (signal?.aborted) throw stopped();
       onState(step.id, { status: "signing" });
-      const tick = (await chain.tick()) + TICK_OFFSET;
+      const tick = (await chain.tick()) + tickOffset;
       const signed = await sign(await buildTx(source, step, tick));
       // Signing in a wallet app can take long; make sure the tick is still ahead before broadcasting.
       if ((await chain.tick()) > tick - 3) throw new Error("Signing took too long and the tick expired. Please try again.");
@@ -95,7 +104,7 @@ export async function runSteps(
       await afterConfirm?.(step, txId);
       onState(step.id, { status: "done", txId, moneyFlew: result.moneyFlew });
     } catch (e) {
-      onState(step.id, { status: "failed", error: e instanceof Error ? e.message : String(e) });
+      onState(step.id, { status: "failed", error: stepFailure(e) });
       return false;
     }
   }

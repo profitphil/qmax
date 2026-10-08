@@ -95,7 +95,7 @@ export function MyAssetsSummary({ pf, qu, compact }: { pf: Portfolio; qu: QuSnap
           )}
           Costs come from your trades in the last {pf.ledgerDays} days by average cost, fees included; units bought earlier or received from another wallet have a worth but no profit.
           {t.noBuyers > 0 && ` ${t.noBuyers} holding${t.noBuyers === 1 ? " has" : "s have"} no buyers right now, so ${t.noBuyers === 1 ? "it adds" : "they add"} nothing to the worth.`}
-          {t.partial > 0 && ` ${t.partial} can only be sold in part: only what the market would take is counted.`} Each asset is priced on its own. Not tax advice.
+          {t.partial > 0 && ` ${t.partial} can only be sold in part (its row says how many, like 12/30): only what buyers would take now is counted.`} Each asset is priced on its own. Not tax advice.
         </p>
       )}
     </section>
