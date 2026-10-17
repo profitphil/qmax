@@ -247,6 +247,22 @@ Features bring their own endpoints without editing the server: `src/routes.ts` d
 ## Being found by agents (and search)
 **The MCP server and the SDK are hosted on the site** under `/agents/` (a guide page, `qmax-mcp.mjs`, `qmax-sdk.tgz`, `qmax-sdk.js` and `SHA256SUMS`). `npm run agents:build` (`scripts/build-agents.mjs`) builds them into `web/public/agents/` (the MCP file with the live API as its default address; the SDK packed, its type declaration for the planner cut down to the plan's shape; the checksums), and the deploy runs it before building the site. `/llms.txt` and the sitemap link to them.
 
+### Verifying the downloads
+`SHA256SUMS` (the hash of each file under `/agents/`) is signed with the maintainer's own [minisign](https://jedisct1.github.io/minisign/) key, kept on the maintainer's computer and never on the server. The public key:
+
+```
+RWRMUiy37f8/2tR95zGd1GrgIuOk9ichS/Ohe99rlJrq7Xtd3d+Dfu3c
+```
+
+```sh
+curl -O https://qmax.exchange/agents/SHA256SUMS
+curl -O https://qmax.exchange/agents/SHA256SUMS.minisig
+minisign -V -P RWRMUiy37f8/2tR95zGd1GrgIuOk9ichS/Ohe99rlJrq7Xtd3d+Dfu3c -m SHA256SUMS   # the list came from the key's owner
+shasum -a 256 -c SHA256SUMS                                                              # each file matches the list
+```
+
+This README is the copy of the key to trust: the website is what is being checked, so do not take the key from the site alone. `scripts/sign-release.sh` makes the signature (the deploy runs it)
+
 `web/index.html` carries the title, description, canonical address, Open Graph and Twitter cards (the 1200x630 `web/public/brand/og.png`), JSON-LD (`WebSite`, `WebApplication`, `WebAPI`), `<link>`s to `/llms.txt` and the OpenAPI document, and a `<noscript>` summary for crawlers that do not run JavaScript (the app itself is client-rendered, so without it a crawler would see an empty page). `web/public/robots.txt` welcomes crawlers (and keeps them out of the API's endpoints, but not its OpenAPI document), `sitemap.xml` lists the one page. **`/llms.txt`** (`src/llms.ts`, passed through by nginx) is the Markdown guide an agent reads first: what QMax is, the API's address and main endpoints, what is free, what a Max plan costs and how to pay with x402; it is written from the same settings as the API (`PUBLIC_BASE_URL`, `API_MAX_PRICE_QU`, the session settings), so it cannot state a stale price. The OpenAPI document lists the API's public address under `servers`, so a client builds working URLs (set `PUBLIC_BASE_URL=https://qmax.exchange/api`; it is also the `resource.url` an x402 challenge names).
 
 ## For agents: self-signed trades (and optional x402 sessions)

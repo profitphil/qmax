@@ -94,8 +94,15 @@ quote.route;   // the cheapest way to fill it across QX and QSwap, each leg with
 
       <h2>Check what you downloaded</h2>
       <pre><code>curl -O https://qmax.exchange/agents/SHA256SUMS
+curl -O https://qmax.exchange/agents/SHA256SUMS.minisig
+minisign -V -P RWRMUiy37f8/2tR95zGd1GrgIuOk9ichS/Ohe99rlJrq7Xtd3d+Dfu3c -m SHA256SUMS
 shasum -a 256 -c SHA256SUMS</code></pre>
-      <p><a href="/agents/SHA256SUMS">SHA256SUMS</a> lists the hash of each file here. Run a file you downloaded only if its hash matches.</p>
+      <p>
+        <a href="/agents/SHA256SUMS">SHA256SUMS</a> lists the hash of each file here, and <a href="/agents/SHA256SUMS.minisig">SHA256SUMS.minisig</a> is its signature, made with the maintainer's own
+        <a href="https://jedisct1.github.io/minisign/">minisign</a> key, which is never on this server. The first check proves the list came from that key; the second checks each file against the list.
+        Run a file you downloaded only if both pass. This page is part of what is being checked, so compare the key above with the one in the README at
+        <a href="https://github.com/profitphil/qmax#verifying-the-downloads">github.com/profitphil/qmax</a>: that copy is the one to trust.
+      </p>
 
       <h2>How the payment works</h2>
       <p>

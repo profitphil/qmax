@@ -16,6 +16,9 @@ const apiBaseOf = (env: Record<string, string | undefined>) => (env.PUBLIC_BASE_
 /** The website's address: the API's with its /api prefix taken off. */
 const siteOf = (apiBase: string) => apiBase.replace(/\/api$/, "");
 
+/** The public half of the maintainer's minisign key, which signs the downloads' SHA256SUMS. The README and the agents page carry the same line (test/signing.test.ts keeps the three equal). */
+export const RELEASE_KEY = "RWRMUiy37f8/2tR95zGd1GrgIuOk9ichS/Ohe99rlJrq7Xtd3d+Dfu3c";
+
 export function llmsText(env: Record<string, string | undefined>): string {
   const api = apiBaseOf(env) || "https://qmax.exchange/api";
   const site = siteOf(api);
@@ -92,7 +95,7 @@ export function llmsText(env: Record<string, string | undefined>): string {
     ...(mcpOn ? [`- **Hosted MCP server, nothing to install:** \`${api}/mcp\` (MCP over Streamable HTTP, stateless). Add that URL to any MCP client that supports remote servers, for example \`claude mcp add --transport http qmax ${api}/mcp\`. It has the same read-only tools as the downloadable server except the paid Max plan, and it is free with no key, under the same per-address limits as the API.`] : []),
     `- [MCP server](${site}/agents/qmax-mcp.mjs): one file, run with Node 22 or newer (\`node qmax-mcp.mjs\`, MCP over stdio); it talks to ${api} by default. Its tools are read-only: quotes, order books, candles, arbitrage checks, pools and unsigned trade plans${agents.maxPriceQu !== null ? `, plus \`qmax_best_position\` (Max), which costs ${n(agents.maxPriceQu)} QU a plan` : ""}.`,
     `- [TypeScript SDK](${site}/agents/qmax-sdk.tgz): an npm package with types (\`npm install ${site}/agents/qmax-sdk.tgz\`); \`@qmax/sdk/agent\` signs an agent's own trades inside limits it sets. The same client as one file: [qmax-sdk.js](${site}/agents/qmax-sdk.js).`,
-    `- [SHA256SUMS](${site}/agents/SHA256SUMS): the hash of each download; check it before running anything.`,
+    `- [SHA256SUMS](${site}/agents/SHA256SUMS): the hash of each download, signed: [SHA256SUMS.minisig](${site}/agents/SHA256SUMS.minisig) is a minisign signature made with the maintainer's key \`${RELEASE_KEY}\` (compare it with the one in the README at https://github.com/profitphil/qmax, which is the copy to trust). Before running anything: \`minisign -V -P ${RELEASE_KEY} -m SHA256SUMS\`, then \`shasum -a 256 -c SHA256SUMS\`.`,
     "",
     "## Trading safely",
     "",
