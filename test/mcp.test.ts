@@ -58,6 +58,7 @@ const fake: QMaxApi = {
   healthAll: async () => ({ assets: {}, computedAt: "now" }) as never,
   tape: async () => ({ trades: [], latestId: 0, instance: "x", flow24h: {} }) as never,
   flow: async () => ({}) as never,
+  sellers: async () => ({ status: "ready", at: 0, analysis: {} }) as never,
   swapQuote: async () => ({}) as never,
   ledger: async () => ({ entries: [] }) as never,
   liquidityPositions: async (identity) => ({ identity, positions: [], poolsChecked: 3, failed: [], complete: true }) as never,

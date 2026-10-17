@@ -1,3 +1,4 @@
+import { bytesToIdentity, hexToBytes } from "./identity.ts";
 import { QswapVenue, QxVenue } from "./venues.ts";
 import type { BookLevel } from "./venues.ts";
 
@@ -9,6 +10,10 @@ export interface BookRow {
   /** Units and QU you would take going from the best price down to this one. */
   cumQty: number;
   cumQu: number;
+  /** The wallet that placed the orders here, when they are all one wallet's (60 letters). Absent when several wallets are at this price, or the book did not say. */
+  owner?: string;
+  /** How many different wallets have orders at this price, when the book says. */
+  owners?: number;
 }
 
 export interface QxBook {
@@ -55,12 +60,14 @@ export interface BookView {
 
 /** Orders at the same price become one row; `cum*` run from the best price outward. `max` limits the rows (not the totals). */
 function rows(levels: BookLevel[], side: "ask" | "bid", max: number): { rows: BookRow[]; total: { levels: number; orders: number; qty: number } } {
-  const byPrice = new Map<number, { qty: number; orders: number }>();
+  const byPrice = new Map<number, { qty: number; orders: number; owners: Set<string>; unknown: boolean }>();
   for (const l of levels) {
     if (!(l.qty > 0) || !(l.price > 0)) continue;
-    const cur = byPrice.get(l.price) ?? { qty: 0, orders: 0 };
+    const cur = byPrice.get(l.price) ?? { qty: 0, orders: 0, owners: new Set<string>(), unknown: false };
     cur.qty += l.qty;
     cur.orders++;
+    if (l.ownerKey) cur.owners.add(l.ownerKey);
+    else cur.unknown = true;
     byPrice.set(l.price, cur);
   }
   const sorted = [...byPrice.entries()].sort((a, b) => (side === "ask" ? a[0] - b[0] : b[0] - a[0]));
@@ -70,7 +77,9 @@ function rows(levels: BookLevel[], side: "ask" | "bid", max: number): { rows: Bo
   for (const [price, v] of sorted.slice(0, max)) {
     cumQty += v.qty;
     cumQu += v.qty * price;
-    out.push({ price, qty: v.qty, orders: v.orders, cumQty, cumQu });
+    const known = !v.unknown && v.owners.size > 0;
+    const owner = known && v.owners.size === 1 ? bytesToIdentity(hexToBytes([...v.owners][0])) : undefined;
+    out.push({ price, qty: v.qty, orders: v.orders, cumQty, cumQu, ...(owner ? { owner } : {}), ...(known ? { owners: v.owners.size } : {}) });
   }
   return {
     rows: out,

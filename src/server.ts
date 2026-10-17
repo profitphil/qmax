@@ -17,7 +17,8 @@ import { createHealth } from "./health.ts";
 import { swapRoutes } from "./swap.ts";
 import { maxRoutes } from "./maxroutes.ts";
 import { llmsRoutes } from "./llms.ts";
-import { ledgerRoutes } from "./ledger.ts";
+import { ledgerFor, ledgerRoutes } from "./ledger.ts";
+import { SellerService, sellersRoutes } from "./sellers.ts";
 import { liquidityRoutes } from "./liquidity.ts";
 import type { SwapQuote } from "./swap.ts";
 import { buildQuote } from "./quoteapi.ts";
@@ -28,6 +29,11 @@ import { LiveMarketData } from "./live.ts";
 import { Meter } from "./meter.ts";
 import { RefLog } from "./refs.ts";
 import { UsageLog } from "./usage.ts";
+import { Relay } from "./relay.ts";
+import { quotesRoutes } from "./quotesroute.ts";
+import { mcpHandler } from "./mcphost.ts";
+import { tokenPages } from "./tokenpages.ts";
+import type { PageHandler } from "./tokenpages.ts";
 import { ProService, proRoutes } from "./proapi.ts";
 import { PayoutLog } from "./payouts.ts";
 import { periodBounds, periodOf, shareConfigFromEnv } from "./profitshare.ts";
@@ -81,6 +87,8 @@ let label;
 let tradeSource: TradeSource | undefined;
 /** Endpoints that features bring (health, premium, pools, ledger, ...), mounted below once the market data exists. */
 const featureRoutes: Route[] = [];
+/** The token pages (/token/…) and their sitemap: made once the live market data exists (below). */
+let pageHandler: PageHandler | undefined;
 const quFeed = new PriceFeed(defaultSources());
 try {
   if (!assetsFile) throw new Error("no assets file");
@@ -254,6 +262,33 @@ try {
         priceOf: (key) => catalog.list().find((e) => `${e.symbol}|${e.issuer}` === key)?.priceQu ?? null,
       }),
     );
+    // Who has been selling an asset and what they paid: it reads the biggest senders' ledgers from the archive in the background (about a minute and a half per asset, kept six hours), with its own
+    // client so it is paced apart from the rest, and the busiest assets are read ahead of time so the first person to look is not the one who waits.
+    if (process.env.SELLERS !== "off") {
+      const sellersRpc = new QubicRpc({ baseUrl, maxRps: 2, timeoutMs: 30_000 });
+      const sellers = new SellerService({
+        archive: sellersRpc,
+        ledgerOf: (identity) => ledgerFor(sellersRpc, identity, { days: 365, now: Date.now(), maxRequests: 40, priceOf: (key) => catalog.list().find((e) => `${e.symbol}|${e.issuer}` === key)?.priceQu ?? null }),
+        lookup: (id) => {
+          const all = catalog.list();
+          const u = id.toUpperCase();
+          const bySymbol = all.filter((e) => e.symbol.toUpperCase() === u);
+          const e = all.find((x) => x.id.toUpperCase() === u) ?? (bySymbol.length === 1 ? bySymbol[0] : undefined);
+          return e ? { id: e.id, symbol: e.symbol, issuer: e.issuer } : null;
+        },
+      });
+      featureRoutes.push(...sellersRoutes(sellers));
+      if (process.env.SELLERS_WARM !== "off") {
+        const warm = () => {
+          const volumes = tradeSource?.volumes?.();
+          if (!volumes) return;
+          const top = [...volumes.entries()].sort((a, b) => b[1].volume7dQu - a[1].volume7dQu).slice(0, 5).filter(([, v]) => v.volume7dQu > 0);
+          top.forEach(([id], i) => setTimeout(() => sellers.warm(id), i * 20_000).unref());
+        };
+        setTimeout(warm, 10 * 60_000).unref(); // after the first scan of the network has finished
+        setInterval(warm, 6 * 3_600_000).unref();
+      }
+    }
     featureRoutes.push(...tapeRoutes({ tape, knownAsset: (id) => catalog.list().some((e) => e.id.toUpperCase() === id.toUpperCase()) }));
   }
   void catalog.start().then(() => console.log(`Asset scan finished: ${catalog.list().length} tradable assets`));
@@ -291,6 +326,10 @@ try {
   featureRoutes.push(...qubicRoutes({ price: new QubicPrice({ rate: () => quFeed.rate() }) }));
   featureRoutes.push(...plansRoutes(process.env)); // what the Discord subscription costs, for the website's welcome window
   featureRoutes.push(...llmsRoutes(process.env)); // /llms.txt: what QMax is and how an agent uses it (nginx serves it at the site's root)
+  // A page for every asset, from one template, and the sitemap that lists the ones that traded this week (served by nginx at /token/ and /sitemap-tokens.xml).
+  if (process.env.TOKEN_PAGES !== "off") pageHandler = tokenPages({ data: quoteData, usdPerQu: async () => (await quFeed.rate()).usdPerQu });
+  // Several sizes of an order in one call: only where quotes are free for everyone (a prepaid deployment bills each split quote, which a batch would get around).
+  if ((process.env.API_ACCESS ?? "free") === "free") featureRoutes.push(...quotesRoutes(quoteData));
   featureRoutes.push(...swapRoutes({ quote: (side, asset, qty, slippageBps) => buildQuote(quoteData, { side, asset, qty, slippageBps }, { allowTinyQswapBuy: true }) as Promise<SwapQuote>, quoteOnly: (venue) => (side, asset, qty, slippageBps) => buildQuote(quoteData, { side, asset, qty, slippageBps }, { allowTinyQswapBuy: true, onlyVenue: venue }) as Promise<SwapQuote>, ...(process.env.SWAP_MAX_OUTLAY_QU ? { maxOutlayQu: Number(process.env.SWAP_MAX_OUTLAY_QU) } : {}) }));
   // Max (a Pro feature of the website): plans the best position for an order from the same quotes, the QX book and pool, and the last day of QX trades.
   featureRoutes.push(
@@ -403,6 +442,6 @@ if (!demo && process.env.PRO_COVER !== "off") {
 const proOn = featureRoutes.some((r) => r.path === "/v1/pro");
 if (!demo) usage.start({ trades: process.env.TRADE_USAGE !== "off", payments: process.env.TRADE_USAGE !== "off" || shareOn || proOn });
 onExit.push(() => usage.flush(), () => refs.flush());
-createApi({ data, history, trades: tradeSource, routes: featureRoutes, x402, apiKey: process.env.API_KEY, adminKey, meter, freeAccess: access === "free", maxPriceQu, publicUrl: process.env.PUBLIC_BASE_URL, refs, usage, freePerMin: envNumber("API_FREE_PER_MIN", 60, 1), trustProxy: envNumber("TRUST_PROXY", 0, 0, 10) }).listen(port, host, () =>
+createApi({ data, history, trades: tradeSource, routes: featureRoutes, x402, apiKey: process.env.API_KEY, adminKey, meter, freeAccess: access === "free", maxPriceQu, publicUrl: process.env.PUBLIC_BASE_URL, refs, usage, mcp: demo || process.env.MCP_HOSTED === "off" ? undefined : mcpHandler(), pages: pageHandler, relay: demo || process.env.ORDER_RELAY === "off" ? undefined : new Relay({ rpcUrl: process.env.QUBIC_RPC_URL ?? "https://rpc.qubic.org", usage: process.env.TRADE_USAGE === "off" ? undefined : usage }), freePerMin: envNumber("API_FREE_PER_MIN", 60, 1), trustProxy: envNumber("TRUST_PROXY", 0, 0, 10) }).listen(port, host, () =>
   console.log(`QMax API on http://${host}:${port}, ${label}${meter ? `; prepaid API: ${access === "free" ? `${maxPriceQu} QU per Max quote for agents (everything else is free)` : `${meter.splitPriceQu} QU per split quote, ${meter.arbitragePriceQu} QU per arbitrage result`}${x402 ? `; x402 sessions: ${x402.priceQu} QU for ${x402.seconds / 60} minutes` : ""}` : access === "free" ? `; the API is free for everyone (${process.env.API_FREE_PER_MIN ?? 60} market requests a minute per IP; no key, no billing)` : "; API is private (API_KEY only)"}`),
 );

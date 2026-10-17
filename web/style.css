@@ -494,6 +494,18 @@ button.go.sell { --btn-bg: var(--sell); --btn-fg: var(--sell-ink); box-shadow: n
 .ladder-head, .ladder-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; padding: 3px 14px; }
 .ladder-head { color: var(--muted); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 6px; }
 .ladder-head span:not(:first-child), .ladder-row span:not(:first-child) { text-align: right; }
+/* the QX ladder has five columns (price, wallet, size, total units, total QU); the pool table keeps its three */
+.ladder.five .ladder-head, .ladder.five .ladder-row { grid-template-columns: minmax(calc(var(--price-ch, 6) * 1ch), 0.8fr) minmax(0, 0.62fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.95fr); gap: 6px; }
+.ladder.five .ladder-head span:nth-child(2), .ladder.five .ladder-row .owner { text-align: left; }
+.ladder .owner { color: var(--fg-2); letter-spacing: 0.02em; }
+.ladder a.owner { text-decoration: underline dotted; text-underline-offset: 3px; }
+.ladder a.owner:hover { color: var(--accent); text-decoration: underline; }
+.ladder .owner.none, .ladder .owner.many { color: var(--muted); }
+.n-short { display: none; }
+@media (max-width: 720px) {
+  .n-full { display: none; } .n-short { display: inline; }
+  .ladder.five { font-size: 12px; } .ladder.five .ladder-head, .ladder.five .ladder-row { padding-left: 10px; padding-right: 10px; gap: 5px; } .ladder.five .ladder-head { font-size: 10px; letter-spacing: 0.02em; }
+}
 .ladder-row small { color: var(--muted); }
 .ladder-row .ask { color: var(--sell); } .ladder-row .bid { color: var(--buy); }
 .ladder-mid { text-align: center; color: var(--fg-2); font-family: var(--font); font-size: 12px; padding: 7px 14px; border-block: 1px solid var(--line); margin: 4px 0; background: var(--surface-2); }

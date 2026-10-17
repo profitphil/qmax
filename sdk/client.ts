@@ -5,6 +5,7 @@ import type { PoolDetailResponse, PoolsResponse } from "../src/pools.ts";
 import type { PremiumResponse } from "../src/premium.ts";
 import type { BacktestRequest, BacktestResponse } from "../src/backtest.ts";
 import type { HealthAllResponse, HealthResponse } from "../src/health.ts";
+import type { SellersView } from "../src/sellers.ts";
 import type { Flow, TapeRow } from "../src/tape.ts";
 import type { PoolResponse, PositionsResponse } from "../src/liquidity.ts";
 import type { SwapPlan } from "../src/swap.ts";
@@ -88,6 +89,11 @@ export class QMaxClient {
   private base: string;
   private apiKey?: string;
   private fetchFn: typeof fetch;
+
+  /** Where QMax is (no trailing slash): an agent's orders can be sent through it (see `AgentTradeOptions.reportTo`). */
+  get baseUrl(): string {
+    return this.base;
+  }
 
   constructor(opts: QMaxOptions) {
     this.base = opts.baseUrl.replace(/\/$/, "");
@@ -207,6 +213,14 @@ export class QMaxClient {
     if (o.since !== undefined) q.set("since", String(o.since));
     if (o.venue) q.set("venue", o.venue);
     return this.call(`/v1/tape?${q}`);
+  }
+
+  /**
+   * Who has sold an asset in the last 7 days and what they paid, read from the public chain. The first ask starts a reading that takes a minute or two and answers `status: "working"` (with what is
+   * known so far); ask again every few seconds until `status: "ready"`. The answer is kept for six hours.
+   */
+  sellers(asset: string): Promise<SellersView> {
+    return this.call(`/v1/sellers?${new URLSearchParams({ asset })}`);
   }
 
   /** Buy versus sell volume (QU and units), trade counts and net pressure over the last hour or 24 hours, for one asset or all. */

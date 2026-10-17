@@ -158,9 +158,9 @@ export function SettingsModal({ onClose, onSupport }: { onClose: () => void; onS
         <section>
           <h3>Privacy</h3>
           <label className="check">
-            <input type="checkbox" checked={s.shareUsage} onChange={(e) => update({ shareUsage: e.target.checked })} /> Let QMax count my trades and show my membership (it is told the transaction id and your wallet address after each trade, and your address when you open the wallet menu)
+            <input type="checkbox" checked={s.shareUsage} onChange={(e) => update({ shareUsage: e.target.checked })} /> Let QMax count my orders and show my membership (your signed order goes to the network through QMax, which notes its transaction id and your wallet address, and it is told your address when you open the wallet menu)
           </label>
-          <small className="muted">Both are public on the Qubic network anyway. QMax checks each trade against the chain before counting it, and uses the totals to see how many people use it. Turn this off and neither is sent. Features that read your wallet's history for you (History, Your liquidity) still send it when you open them, because they cannot work without it. The page also loads its fonts from Google, and talks to WalletConnect when you connect a wallet.</small>
+          <small className="muted">Both are public on the Qubic network anyway. QMax checks each trade against the chain before counting it, and uses the totals to see how many people use it. Turn this off and your orders go straight to the network and neither is sent. Features that read your wallet's history for you (History, Your liquidity) still send it when you open them, because they cannot work without it. The page also loads its fonts from Google, and talks to WalletConnect when you connect a wallet.</small>
         </section>
 
         <section>

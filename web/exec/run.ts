@@ -19,7 +19,8 @@ export const INSTANT_SIGNER_TICK_OFFSET = 20;
 /** What sending a transaction needs from the network. The default is the public Qubic RPC; tests and other setups can supply their own. */
 export interface StepChain {
   tick(): Promise<number>;
-  broadcast(tx: Uint8Array): Promise<string>;
+  /** `wallet` is who signed it, so an order can be offered to QMax with its owner named. */
+  broadcast(tx: Uint8Array, wallet?: string): Promise<string>;
   wait(txId: string, targetTick: number): Promise<{ included: boolean; moneyFlew: boolean }>;
 }
 
@@ -92,7 +93,7 @@ export async function runSteps(
       // Signing in a wallet app can take long; make sure the tick is still ahead before broadcasting.
       if ((await chain.tick()) > tick - 3) throw new Error("Signing took too long and the tick expired. Please try again.");
       if (signal?.aborted) throw stopped(); // the wallet answered after the window was gone: do not broadcast it
-      const txId = await chain.broadcast(signed.tx);
+      const txId = await chain.broadcast(signed.tx, source);
       onState(step.id, { status: "confirming", txId });
       const result = await chain.wait(txId, tick);
       if (!result.included) throw new Error(`Transaction ${txId} was not confirmed in time. Check it on the explorer before retrying.`);

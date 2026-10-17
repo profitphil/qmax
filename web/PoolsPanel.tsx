@@ -50,11 +50,13 @@ const FROM = {
  * and how far to trust the numbers. Selecting a pool opens a plain-English breakdown and a deposit calculator below its row.
  * `onSelectAsset` is told the asset id when someone asks to trade that asset (the button is left out without it).
  */
-export function PoolsPanel({ onSelectAsset, assets, walletId, onConnect, onChanged }: {
+export function PoolsPanel({ onSelectAsset, assets, walletId, readOnly = false, onConnect, onChanged }: {
   onSelectAsset?: (assetId: string) => void;
   /** The asset list: with it the panel shows the wallet's positions and offers adding and removing liquidity. */
   assets?: AssetItem[];
   walletId?: string | null;
+  /** The wallet is one being looked at, not the connected one: its positions are shown with no way to add or remove. */
+  readOnly?: boolean;
   onConnect?: () => void;
   /** Told when liquidity was added or removed, so the page can read the wallet again. */
   onChanged?: () => void;
@@ -134,7 +136,7 @@ export function PoolsPanel({ onSelectAsset, assets, walletId, onConnect, onChang
       )}
 
       {assets && (
-        <PoolPositions walletId={walletId ?? null} assets={assets} reloadKey={posReload} onAdd={(asset) => setLiq({ asset, mode: "add" })} onRemove={(asset) => setLiq({ asset, mode: "remove" })} />
+        <PoolPositions walletId={walletId ?? null} assets={assets} readOnly={readOnly} reloadKey={posReload} onAdd={(asset) => setLiq({ asset, mode: "add" })} onRemove={(asset) => setLiq({ asset, mode: "remove" })} />
       )}
 
       {data && pools.length > 0 && (

@@ -243,11 +243,6 @@ export function QubicConnectProvider({ children }: QubicConnectProviderProps) {
     );
   }, [wallet?.connectType, wallet?.publicKey]);
 
-  // A connection the wallet approved while the page was away is picked up (WalletConnectContext): open the dialog at the choice of account instead of leaving the person to ask again.
-  useEffect(() => {
-    if (adoptedAt && !wallet) setShowConnectModal(true);
-  }, [adoptedAt]);
-
   const getMetaMaskPublicId = async (accountIdx: number = 0, confirm: boolean = false): Promise<string> => {
     const provider = getResolvedMetaMaskProvider() ?? window.ethereum;
     return await provider.request({

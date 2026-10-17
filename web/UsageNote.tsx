@@ -7,12 +7,12 @@ export function UsageNote() {
     <p className="note usage-note">
       {settings.shareUsage ? (
         <>
-          QMax counts the transaction ids of trades made here, which are public on-chain data, to measure usage.{" "}
+          Your signed order goes to the network through QMax, which notes its transaction id (public on-chain data) to count orders made here.{" "}
           <button type="button" className="link" onClick={() => update({ shareUsage: false })}>Turn off</button>
         </>
       ) : (
         <>
-          Usage counting is off: QMax is not told about your trades.{" "}
+          Counting is off: your order goes straight to the network and QMax is not told about it.{" "}
           <button type="button" className="link" onClick={() => update({ shareUsage: true })}>Turn on</button>
         </>
       )}

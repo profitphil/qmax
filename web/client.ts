@@ -25,6 +25,19 @@ export async function searchAssets(name: string): Promise<AssetItem[]> {
   return body.assets;
 }
 
+/** The slippage the API uses when none is given, so a link to a quote leaves it out. */
+const DEFAULT_SLIPPAGE_BPS = 100;
+
+/**
+ * The address of a quote as the API serves it, in full (so it works when copied or followed from anywhere): the same quote the order panel shows, as JSON, for scripts and AI assistants.
+ * The page shows it as a link beside every quote, so anything that can read the page, a person or an agent driving a browser, finds the free API from the quote it is looking at.
+ */
+export function quoteUrl(p: { side: string; asset: string; qty: number; slippageBps?: number }): string {
+  const q = new URLSearchParams({ side: p.side, asset: p.asset, qty: String(p.qty) });
+  if (p.slippageBps !== undefined && p.slippageBps !== DEFAULT_SLIPPAGE_BPS) q.set("slippageBps", String(p.slippageBps));
+  return new URL(`${BASE}/v1/quote?${q}`, typeof location === "undefined" ? "https://qmax.exchange" : location.href).href;
+}
+
 export async function fetchQuote(
   p: { side: string; asset: string; qty: number; slippageBps: number },
   signal?: AbortSignal,

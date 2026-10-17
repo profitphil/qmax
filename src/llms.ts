@@ -22,6 +22,14 @@ export function llmsText(env: Record<string, string | undefined>): string {
   const agents = agentPlan(env);
   const perMin = Number(env.API_FREE_PER_MIN) > 0 ? Number(env.API_FREE_PER_MIN) : 60;
   const tip = supportUrl(env);
+  /** Quotes are free for everyone: only then is the several-sizes call offered (see server.ts). */
+  const free = (env.API_ACCESS ?? "free") === "free";
+  /** The hosted MCP endpoint is served unless switched off (see server.ts). */
+  const mcpOn = env.MCP_HOSTED !== "off";
+  /** The token pages are served unless switched off (see server.ts). */
+  const tokensOn = env.TOKEN_PAGES !== "off";
+  /** The sellers reading is served unless switched off (see server.ts). */
+  const sellersOn = env.SELLERS !== "off";
 
   const max =
     agents.maxPriceQu !== null
@@ -52,6 +60,14 @@ export function llmsText(env: Record<string, string | undefined>): string {
     "",
     "QMax never holds keys: every trade is signed in the person's or the agent's own wallet, and QMax never signs or sends a transaction for anyone. Prices are in QU, Qubic's coin; quantities are whole units of an asset. A quote is a snapshot: prices move, so quote again before signing.",
     "",
+    "## Quick answers",
+    "",
+    `- **"How much would N of ASSET sell for?"** or **"What is my holding worth?"** Ask for a quote: \`GET ${api}/v1/quote?side=sell&asset=ASSET&qty=N\` (for example [50 million QDOGE](${api}/v1/quote?side=sell&asset=QDOGE&qty=50000000)). It prices the whole order across the QX order book and the QSwap pool, splits it where that pays more, and the \`summary\` field says the result in words. Free, no key. A big sale moves the price and the quote already counts that: do not multiply a listed price by the quantity.`,
+    `- **"What would it cost to buy N of ASSET?"** The same call with \`side=buy\`.`,
+    ...(free ? [`- **"What size should I trade at a time?"** Price several sizes at once from one reading of the markets: [\`GET ${api}/v1/quotes?side=sell&asset=QDOGE&qtys=1000000,10000000,50000000\`](${api}/v1/quotes?side=sell&asset=QDOGE&qtys=1000000,10000000,50000000) (up to 10 sizes; each has its average price and how much worse it is than the smallest size).`] : []),
+    `- **"What is on the order book?"** [\`GET ${api}/v1/book?asset=ASSET\`](${api}/v1/book?asset=QDOGE) (the QX ladder and the QSwap pool's depth). It is public: no wallet is needed for any of this.`,
+    `- **"Where do I buy or sell it?"** On [QMax](${site}/), or through this API; a trade is always signed in the person's own wallet.`,
+    "",
     "## Use the API",
     "",
     `API base URL: ${api}`,
@@ -61,17 +77,19 @@ export function llmsText(env: Record<string, string | undefined>): string {
     `- [Assets](${api}/v1/assets): every tradable asset (QX tokens and smart-contract shares) with its markets, price, liquidity and volume.`,
     `- [Quote](${api}/v1/quote?side=buy&asset=QDOGE&qty=1000000): the cheapest way to fill an order across QX and QSwap, splits included, with each leg's venue, size, price, fees and the limits to sign against. Free.`,
     `- [Order book](${api}/v1/book?asset=QDOGE): the QX ladder and the QSwap pool's depth. Free.`,
+    ...(sellersOn ? [`- [Sellers](${api}/v1/sellers?asset=QDOGE): who sold an asset in the last 7 days and what they paid: each seller's holding period (each unit sold matched to the purchase it came from), cost and result, with a plain-language reading. The first call starts a reading that takes a minute or two and answers \`status: "working"\`; call again every few seconds until \`ready\`. Free.`] : []),
     `- [Candles](${api}/v1/candles?asset=QDOGE&range=7d): open, high, low, close and QU volume from real trades, about six months back. Free.`,
     `- [Arbitrage check](${api}/v1/arbitrage?asset=QDOGE): a live search for a profitable loop between QX and QSwap after every fee. Free.`,
     `- Also free: price history, pools and their fee yield, asset health, the live trade tape, a wallet's trade ledger and QSwap liquidity positions. See the OpenAPI document.`,
     max,
     "",
-    `Without a key the market endpoints are limited to ${perMin} requests a minute per IP, and answer 429 with Retry-After past that. No account or key is needed otherwise.`,
+    `Without a key the market endpoints are limited to ${perMin} requests a minute per IP, and answer 429 with Retry-After past that. Every limited call carries X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset (seconds), so a bot can slow down before it is refused, and every error has a stable \`code\` (bad_request, not_found, rate_limited, ...) beside its sentence. No account or key is needed otherwise.`,
     ...pay,
     "",
     "## MCP server and SDK",
     "",
     `- [Guide](${site}/agents/): what is here and how to run it.`,
+    ...(mcpOn ? [`- **Hosted MCP server, nothing to install:** \`${api}/mcp\` (MCP over Streamable HTTP, stateless). Add that URL to any MCP client that supports remote servers, for example \`claude mcp add --transport http qmax ${api}/mcp\`. It has the same read-only tools as the downloadable server except the paid Max plan, and it is free with no key, under the same per-address limits as the API.`] : []),
     `- [MCP server](${site}/agents/qmax-mcp.mjs): one file, run with Node 22 or newer (\`node qmax-mcp.mjs\`, MCP over stdio); it talks to ${api} by default. Its tools are read-only: quotes, order books, candles, arbitrage checks, pools and unsigned trade plans${agents.maxPriceQu !== null ? `, plus \`qmax_best_position\` (Max), which costs ${n(agents.maxPriceQu)} QU a plan` : ""}.`,
     `- [TypeScript SDK](${site}/agents/qmax-sdk.tgz): an npm package with types (\`npm install ${site}/agents/qmax-sdk.tgz\`); \`@qmax/sdk/agent\` signs an agent's own trades inside limits it sets. The same client as one file: [qmax-sdk.js](${site}/agents/qmax-sdk.js).`,
     `- [SHA256SUMS](${site}/agents/SHA256SUMS): the hash of each download; check it before running anything.`,
@@ -85,6 +103,8 @@ export function llmsText(env: Record<string, string | undefined>): string {
     "## Optional",
     "",
     `- [QMax website](${site}/): the trading terminal: charts, order book, swap, portfolio, pools.`,
+    ...(tokensOn ? [`- [Token pages](${site}/token/): a page for every asset QMax lists, with its live price, volume, order book and pool depth, and what selling or buying three sizes would fetch, priced across QX and QSwap. Each is at \`${site}/token/<id>\`, for example [QDOGE](${site}/token/QDOGE).`] : []),
+    `- [Trading on Qubic](${site}/qubic-dex/): how the QX order book and the QSwap pools work, what they cost, and how QMax routes an order across both.`,
     ...(tip ? [`- [Support QMax](${tip}): a Q+Pay tip jar; QMax is free for everyone.`] : []),
     "",
   ].join("\n");

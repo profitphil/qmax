@@ -7,9 +7,9 @@ import { join } from "node:path";
 import { createApi } from "../src/api.ts";
 import { PAYWALL } from "../src/config.ts";
 import type { MarketData } from "../src/data.ts";
-import { identityToBytes } from "../src/identity.ts";
+import { assetNameToU64, identityToBytes } from "../src/identity.ts";
 import { QSWAP_ID, QX_ID } from "../src/ledger.ts";
-import { GIVE_UP_MS, MAX_PENDING_PER_SOURCE, NOT_FOUND_GIVE_UP_MS, REPORT_WINDOW_MS, UsageLog, classifyCall, decodePayment } from "../src/usage.ts";
+import { GIVE_UP_MS, MAX_PENDING_PER_SOURCE, NOT_FOUND_GIVE_UP_MS, REPORT_WINDOW_MS, UsageLog, classifyCall, decodePayment, decodeQxOrder } from "../src/usage.ts";
 import type { Archive } from "../src/usage.ts";
 import { QPAYHUB_IDENTITY, SESSION_RESOURCE_ID, resourceTag } from "../src/x402.ts";
 import { ev, qx, swap } from "./trade-helpers.ts";
@@ -117,6 +117,60 @@ test("a QX buy that filled is counted with its asset, side and QU", async () => 
   assert.equal(w.trades[0].side, "buy");
   assert.equal(w.trades[0].venue, "QX");
   assert.equal(w.trades[0].fills, 2);
+});
+
+/** The input of a QX order: the asset (a 32-byte issuer, then its name), the price and the number of shares. */
+const orderInput = (name: string, price: number, qty: number) => {
+  const b = Buffer.alloc(56);
+  b.writeBigUInt64LE(assetNameToU64(name), 32);
+  b.writeBigInt64LE(BigInt(price), 40);
+  b.writeBigInt64LE(BigInt(qty), 48);
+  return b.toString("base64");
+};
+
+test("a QX order that rests unfilled is counted as an order, with what it was worth, and apart from volume", async () => {
+  const ask = tx(20, { inputType: 5, inputData: orderInput("CFB", 120, 500) });
+  const bid = tx(21, { inputType: 6, amount: String(100 * 40), inputData: orderInput("CFB", 100, 40) });
+  const filled = tx(22, { inputType: 6, amount: "5000", inputData: orderInput("CFB", 100, 50) });
+  const c = chain({ txs: [ask, bid, filled], events: { [filled.hash]: [withHash(qx(filled.tickNumber, T0, "CFB", 100, 50), filled.hash)] } });
+  const u = log(c);
+  u.report({ wallet: A, txIds: [ask.hash, bid.hash, filled.hash], channel: "discord" });
+  assert.equal(await u.verifyPending(10), 3);
+  const s = u.stats({}, T0 + MIN);
+  assert.equal(s.totals.orders, 3, "every order placed: the one that filled and the two that rest");
+  assert.equal(s.totals.trades, 1, "only the one that filled is a trade");
+  assert.equal(s.totals.resting, 2);
+  assert.equal(s.totals.restingQu, 120 * 500 + 100 * 40);
+  assert.equal(s.totals.quVolume, 100 * 50, "resting orders are not volume");
+  assert.equal(s.totals.wallets, 1);
+  assert.deepEqual(s.byChannel.map((r) => [r.channel, r.orders, r.trades]), [["discord", 3, 1]]);
+  const w = u.walletStats(A).trades;
+  const rec = w.find((r) => r.tx === ask.hash)!;
+  assert.deepEqual([rec.kind, rec.side, rec.asset, rec.qty, rec.qu, rec.fills], ["order", "sell", "CFB", 500, 60000, 0]);
+  assert.deepEqual(s.verification.rejected, {}, "nothing was refused");
+});
+
+test("a QX buy whose QU the contract gave straight back, or an order that cannot be read, is not an order", async () => {
+  const refused = tx(23, { inputType: 6, amount: "4000", inputData: orderInput("CFB", 100, 40) });
+  const partlyBack = tx(24, { inputType: 6, amount: "4000", inputData: orderInput("CFB", 100, 40) });
+  const unreadable = tx(25, { inputType: 5, inputData: Buffer.alloc(10).toString("base64") });
+  const zeroSize = tx(26, { inputType: 5, inputData: orderInput("CFB", 100, 0) });
+  const back = (h: string, amount: string) => ({ logType: 0, transactionHash: h, quTransfer: { source: QX_ID, destination: A, amount } });
+  const c = chain({ txs: [refused, partlyBack, unreadable, zeroSize], events: { [refused.hash]: [back(refused.hash, "4000")], [partlyBack.hash]: [back(partlyBack.hash, "1500")] } });
+  const u = log(c);
+  u.report({ wallet: A, txIds: [refused.hash, partlyBack.hash, unreadable.hash, zeroSize.hash] });
+  assert.equal(await u.verifyPending(10), 4);
+  const s = u.stats({}, T0 + MIN);
+  assert.equal(s.totals.orders, 1, "only the buy that kept some of its QU is an order");
+  assert.equal(s.totals.resting, 1);
+  assert.deepEqual(s.verification.rejected, { "no-effect": 3 });
+});
+
+test("reading a QX order's input", () => {
+  assert.deepEqual(decodeQxOrder(orderInput("QDOGE", 7, 1234)), { asset: "QDOGE", price: 7, qty: 1234 });
+  assert.equal(decodeQxOrder(undefined), null);
+  assert.equal(decodeQxOrder(""), null);
+  assert.equal(decodeQxOrder(orderInput("QDOGE", -1, 5)), null, "a price must be positive");
 });
 
 test("a QSwap swap counts by the event's direction, and liquidity counts as an operation", async () => {

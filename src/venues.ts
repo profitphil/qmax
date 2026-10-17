@@ -5,6 +5,8 @@ export interface BookLevel {
   /** QU per unit of asset */
   price: number;
   qty: number;
+  /** The wallet that placed the order: its 32-byte public key as 64 hex letters (read from the book as the contract returns it; absent where the source does not say). */
+  ownerKey?: string;
 }
 
 export const QX_MAX_ORDERS_PER_QUERY = 256;

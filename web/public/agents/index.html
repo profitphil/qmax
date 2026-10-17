@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QMax for AI agents: MCP server and SDK</title>
-    <meta name="description" content="Download the QMax MCP server and TypeScript SDK: quotes, order books, candles and arbitrage for Qubic's QX and QSwap, trade plans an agent signs itself, and x402 payment rails. Free API." />
+    <meta name="description" content="The QMax MCP server and TypeScript SDK: quotes, order books, candles and arbitrage for Qubic's QX and QSwap, trade plans an agent signs itself, x402 rails." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://qmax.exchange/agents/" />
     <meta name="theme-color" content="#070a0f" />
@@ -50,7 +50,14 @@
         an agent signs its own trades, inside limits it sets.
       </p>
 
-      <h2>MCP server</h2>
+      <h2>Hosted MCP server: nothing to install</h2>
+      <p>Point an MCP client at <code>https://qmax.exchange/api/mcp</code> (MCP over Streamable HTTP). It is free, needs no key and no Node, and has the same read-only tools as the download below except the paid Max plan.</p>
+      <pre><code>claude mcp add --transport http qmax https://qmax.exchange/api/mcp</code></pre>
+      <p>Other clients take the address the same way, for example in a JSON config:</p>
+      <pre><code>{ "mcpServers": { "qmax": { "url": "https://qmax.exchange/api/mcp" } } }</code></pre>
+      <p>It is stateless (no session to open or lose) and limited per address like the rest of the API. Nothing it does signs or sends a transaction: <code>qmax_build_plan</code> returns unsigned steps for your own wallet. To ask it what a sale would fetch, use <code>qmax_get_quote</code> with <code>side</code> set to <code>sell</code>: the answer has a plain-language <code>summary</code>.</p>
+
+      <h2>MCP server to run yourself</h2>
       <p>One file, run with Node 22 or newer. It talks to <code>https://qmax.exchange/api</code> unless you set <code>QMAX_API_URL</code>.</p>
       <pre><code>curl -O https://qmax.exchange/agents/qmax-mcp.mjs
 node qmax-mcp.mjs        # speaks MCP on stdio</code></pre>

@@ -32,9 +32,11 @@ export const OPEN_PAGE_HTML = `<!doctype html>
   <div class="brand" role="img" aria-label="QMax"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 292 301"><defs><linearGradient id="qx-up" gradientUnits="userSpaceOnUse" x1="28" y1="271" x2="268" y2="34"><stop offset="0" stop-color="#0A8AC6"/><stop offset=".5" stop-color="#33AEA8"/><stop offset="1" stop-color="#24C294"/></linearGradient><linearGradient id="qx-down" gradientUnits="userSpaceOnUse" x1="30" y1="46" x2="251" y2="260"><stop offset="0" stop-color="#1CBBD8"/><stop offset=".4" stop-color="#28B8B3"/><stop offset=".5" stop-color="#33AFA7"/><stop offset=".6" stop-color="#656A69"/><stop offset=".7" stop-color="#984F52"/><stop offset=".8" stop-color="#B33941"/><stop offset=".9" stop-color="#C82B36"/><stop offset="1" stop-color="#D22230"/></linearGradient></defs><path d="M0.5 31 H57.5 L251 234 L269 216 L286 301 L203 285 L223 261 Z" fill="url(#qx-down)"/><path d="M0.5 270 H57.5 L254 68 L276 88 L292 0 L204 15 L225 38 Z" fill="url(#qx-up)"/></svg></div>
   <h1 id="title">Connect your wallet</h1>
   <p id="msg">Tap the button to connect your wallet to QMax.</p>
+  <a id="done" class="btn" href="#" hidden>Back</a>
   <div id="actions">
     <a id="open" class="btn" href="#">Open in Qubic Wallet</a>
     <button id="copy" class="btn ghost" type="button">Copy link instead</button>
+    <a id="cancel" class="btn ghost" href="#" hidden>Not now: back to QMax</a>
   </div>
   <p id="stuck" class="err" hidden>Nothing opened? A phone's in-app browser (the one Discord uses) can refuse to open another app. Open this page in your own browser instead (the browser icon at the bottom of this screen, or the menu, then "Open in Safari" or "Open in Chrome") and tap the button again, or use "Copy link instead" and paste it into your wallet's WalletConnect box.</p>
   <p id="note">Only go on if you pressed Connect in QMax's Discord bot a moment ago. If someone else sent you this link, do not open it: it would connect your wallet to their app. Nothing on this page is sent anywhere: the link stays on your phone.</p>
@@ -44,6 +46,54 @@ export const OPEN_PAGE_HTML = `<!doctype html>
   var $ = function (id) { return document.getElementById(id); };
   var raw = "";
   var timer = null;
+  var left = false;
+  var returned = false;
+  var helpTimer = null;
+
+  // Where the way back goes, when the site that sent the person here asks for one (?return=/ or ?return=/?x=y): only the front page of this same site, never anything else,
+  // so this page cannot be made to send anyone elsewhere. Without it (the Discord bot's button) the way back is Discord.
+  function backTarget() {
+    var r = "";
+    try { r = new URLSearchParams(location.search).get("return") || ""; } catch (e) {}
+    var ok = r === "/" || (r.indexOf("/?") === 0 && r.length <= 102 && /^[A-Za-z0-9=&_.%-]*$/.test(r.slice(2)));
+    return ok ? location.origin + r : "";
+  }
+
+  // Remembered for as long as this tab lasts, so a page the phone reloads while the wallet is open (the link has been wiped from the address by then) still knows it was used.
+  var SPENT = "qmax.open.spent";
+  function spent() { try { return sessionStorage.getItem(SPENT) === "1"; } catch (e) { return false; } }
+  function markSpent(on) { try { if (on) sessionStorage.setItem(SPENT, "1"); else sessionStorage.removeItem(SPENT); } catch (e) {} }
+
+  // The person has been to their wallet and is back on this page: the link has done its job, so say what to do next instead of leaving the first screen up (which looked like
+  // nothing had happened). From the QMax website the way back is automatic, and QMax picks the approved connection up when it loads; from Discord it is Discord.
+  function backFromWallet() {
+    if (returned || !left) return;
+    showBack();
+  }
+
+  function showBack() {
+    if (returned) return;
+    returned = true;
+    clearTimeout(helpTimer);
+    $("actions").hidden = true;
+    $("stuck").hidden = true;
+    $("note").hidden = true;
+    $("title").textContent = "Back from your wallet?";
+    $("msg").className = "";
+    var back = backTarget();
+    var done = $("done");
+    if (back) {
+      $("msg").textContent = "If you approved the connection, QMax picks it up now. Taking you back\u2026";
+      done.textContent = "Back to QMax";
+      done.href = back;
+      setTimeout(function () { location.replace(back); }, 1500);
+    } else {
+      $("msg").textContent = "If you approved the connection, the QMax bot has your wallet now. Go back to Discord (switch apps, or use the back arrow) and try /wallet.";
+      done.textContent = "Open Discord";
+      done.href = "https://discord.com/channels/@me";
+    }
+    done.hidden = false;
+  }
 
   function fail(text) {
     $("title").textContent = "This link will not work";
@@ -58,7 +108,13 @@ export const OPEN_PAGE_HTML = `<!doctype html>
   function render() {
     clearTimeout(timer);
     raw = "";
+    left = false;
+    returned = false;
+    $("done").hidden = true;
     try { raw = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
+    var way = backTarget();
+    $("cancel").hidden = !way;
+    if (way) $("cancel").href = way;
     $("stuck").hidden = true;
     $("title").textContent = "Connect your wallet";
     $("msg").textContent = "Tap the button to connect your wallet to QMax.";
@@ -67,6 +123,10 @@ export const OPEN_PAGE_HTML = `<!doctype html>
     $("note").hidden = false;
     $("copy").textContent = "Copy link instead";
 
+    // No link in the address at all, on a page that was used or that asked for a way back: the wallet was opened from here and the phone reloaded this page on return (or the
+    // person is simply back). There is nothing left to connect with, so say what to do next instead of calling it a bad link.
+    if (!raw && (way || spent())) return showBack();
+    if (raw) markSpent(false);
     if (!/^wc:[0-9a-f]{64}@2\\?/.test(raw) || raw.length > 1500 || raw.indexOf("symKey=") < 0) {
       return fail("This is not a wallet connection link. Go back to Discord and press Connect again.");
     }
@@ -82,12 +142,10 @@ export const OPEN_PAGE_HTML = `<!doctype html>
   // The link stays in the address until the wallet has been opened (so "Open in Safari" from an in-app browser carries it along); once the page is
   // left for the wallet it is wiped from the address bar and history, as it has done its job.
   var scrubbed = false;
-  function scrub() { if (!scrubbed && location.hash) { scrubbed = true; try { history.replaceState(null, "", location.pathname); } catch (e) {} } }
-  var helpTimer = null;
+  function scrub() { if (!scrubbed && location.hash) { scrubbed = true; markSpent(true); try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} } }
   $("open").addEventListener("click", function (e) {
     if (!raw || /^#?$/.test($("open").getAttribute("href") || "")) return;
     e.preventDefault();
-    var left = false;
     var gone = function () { left = true; clearTimeout(helpTimer); scrub(); };
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") gone(); }, { once: true });
     window.addEventListener("pagehide", gone, { once: true });
@@ -111,6 +169,8 @@ export const OPEN_PAGE_HTML = `<!doctype html>
     else fallback();
   });
 
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") backFromWallet(); });
+  window.addEventListener("pageshow", backFromWallet);
   window.addEventListener("hashchange", function () { if (location.hash) render(); });
   render();
 })();

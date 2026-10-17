@@ -1,10 +1,8 @@
 #!/usr/bin/env node
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { QMaxClient, createX402Fetch } from "../sdk/index.ts";
-import tools, { explain, fit } from "./tools.ts";
-import type { QMaxApi } from "./tools.ts";
+import { createServer } from "./create.ts";
 
 /**
  * QMax as an MCP server (stdio): market data, quotes, routing, candles, pools, backtests and unsigned trade plans for AI agents.
@@ -21,30 +19,7 @@ import type { QMaxApi } from "./tools.ts";
 /** Set when the file is built for hosting (`npm run agents:build`): the API a downloaded copy talks to when QMAX_API_URL is not given. */
 declare const QMAX_DEFAULT_API: string | undefined;
 
-export function createServer(api: QMaxApi): McpServer {
-  const server = new McpServer({ name: "qmax-mcp-server", version: "1.0.0" });
-  for (const t of tools) {
-    server.registerTool(
-      t.name,
-      {
-        title: t.title,
-        description: t.description,
-        inputSchema: t.input,
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: !t.paid, openWorldHint: true },
-      },
-      async (args: Record<string, unknown>) => {
-        try {
-          const result = await t.run(args, api);
-          const { text } = fit(result);
-          return { content: [{ type: "text" as const, text }], structuredContent: undefined };
-        } catch (e) {
-          return { isError: true, content: [{ type: "text" as const, text: `Error: ${explain(e)}` }] };
-        }
-      },
-    );
-  }
-  return server;
-}
+export { createServer };
 
 /** Builds the API client from the environment, with automatic x402 payment only if a seed was given. */
 export async function clientFromEnv(env: Record<string, string | undefined> = process.env): Promise<QMaxClient> {

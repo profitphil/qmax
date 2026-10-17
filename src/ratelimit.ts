@@ -17,7 +17,8 @@ export class RateLimiter {
     return this.seen.size;
   }
 
-  hit(id: string, now = Date.now()): { ok: true } | { ok: false; retryAfterSec: number } {
+  /** `limit`, `remaining` (calls left in this window) and `resetInSec` (until the window ends) are for the X-RateLimit-* headers, so a caller can slow down before it is refused. */
+  hit(id: string, now = Date.now()): { ok: true; limit: number; remaining: number; resetInSec: number } | { ok: false; retryAfterSec: number; limit: number; remaining: 0; resetInSec: number } {
     // Forgetting ids whose window is over is a scan of the whole map, so it is done at most once a second, and the map never holds more
     // than MAX_IDS (the oldest are dropped first: an attacker rotating ids can only push out other idle ones).
     if (this.seen.size > 10_000 && now - this.lastPrune >= 1000) {
@@ -38,8 +39,9 @@ export class RateLimiter {
       const oldest = this.seen.keys().next().value;
       if (oldest !== undefined && oldest !== id) this.seen.delete(oldest);
     }
-    if (w.count >= this.limit) return { ok: false, retryAfterSec: Math.max(1, Math.ceil((w.resetAt - now) / 1000)) };
+    const resetInSec = Math.max(1, Math.ceil((w.resetAt - now) / 1000));
+    if (w.count >= this.limit) return { ok: false, retryAfterSec: resetInSec, limit: this.limit, remaining: 0, resetInSec };
     w.count++;
-    return { ok: true };
+    return { ok: true, limit: this.limit, remaining: this.limit - w.count, resetInSec };
   }
 }

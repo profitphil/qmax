@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import SignClient from "@walletconnect/sign-client";
 import type { WalletConnectAccount } from "./types/account";
-import { describeFailure, makePairing, MemoryStorage, newestQubicSession, pairingIsFresh, startClient } from "./pairing.ts";
+import { accountsFromNamespaces, describeFailure, makePairing, MemoryStorage, newestQubicSession, pairingIsFresh, startClient } from "./pairing.ts";
 
 interface WalletConnectContextType {
   signClient: SignClient | null;
@@ -15,6 +15,8 @@ interface WalletConnectContextType {
   adoptedAt: number | null;
   /** Looks again, now, for a connection the wallet approved while the page was in the background, and takes it up. True if one was found. */
   recheck: () => Promise<boolean>;
+  /** The accounts the wallet listed in the session when it approved, read from the session itself: nothing is asked of the wallet, which may be asleep. */
+  sessionAccounts: () => string[];
   requestAccounts: () => Promise<WalletConnectAccount[]>;
   sendQubic: (params: { from: string; to: string; amount: number }) => Promise<any>;
   signTransaction: (params: {
@@ -262,6 +264,16 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
     return true;
   };
 
+  const sessionAccounts = (): string[] => {
+    const topic = sessionTopic || localStorage.getItem("sessionTopic") || "";
+    if (!signClient || !topic) return [];
+    try {
+      return accountsFromNamespaces(signClient.session.get(topic).namespaces as never);
+    } catch {
+      return [];
+    }
+  };
+
   const recheck = async (): Promise<boolean> => {
     if (!pairingIsFresh(readPending())) return false;
     const client = await getClient().catch(() => null);
@@ -294,7 +306,13 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
       }
     }
     // A wallet that answered while this page was in the background (a phone puts the browser to sleep when the wallet app opens) left a session the page never saw approved.
-    adoptAway(client);
+    // On a fresh load the answer can still be on its way from the relay (it arrives a second or two after the client starts), so look again for a short while.
+    if (!adoptAway(client) && pairingIsFresh(readPending())) {
+      let tries = 0;
+      const look = setInterval(() => {
+        if (++tries > 20 || adoptAway(client) || !pairingIsFresh(readPending())) clearInterval(look);
+      }, 1000);
+    }
 
     client.on("session_delete", () => {
       setSessionTopic("");
@@ -347,6 +365,7 @@ export function WalletConnectProvider({ children }: WalletConnectProviderProps) 
     disconnect,
     adoptedAt,
     recheck,
+    sessionAccounts,
     requestAccounts,
     sendQubic,
     signTransaction,

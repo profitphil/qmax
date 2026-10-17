@@ -10,3 +10,4 @@ Allow: /api/v1/plans
 Allow: /api/v1/x402
 
 Sitemap: https://qmax.exchange/sitemap.xml
+Sitemap: https://qmax.exchange/sitemap-tokens.xml

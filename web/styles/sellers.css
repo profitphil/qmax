@@ -1,0 +1,34 @@
+/* The Sellers tab of an asset's trade section: who sold, how long they held it, what they paid. */
+.sellers { display: grid; gap: 10px; }
+.sellers h4 { margin: 14px 0 2px; font-size: 13px; color: var(--fg); }
+.sellers-progress { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); font-size: 12px; color: var(--muted); }
+.sellers-bar { display: block; height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+.sellers-bar i { display: block; height: 100%; background: var(--accent); transition: width 0.4s ease; }
+.sellers-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; }
+.sellers-stats > div { display: grid; gap: 1px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
+.sellers-stats small { color: var(--muted); font-size: 11px; }
+.sellers-stats b { font-size: 18px; font-weight: 650; color: var(--fg); }
+.sellers .up { color: var(--buy); } .sellers .down { color: var(--sell); }
+.sellers-reading { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; color: var(--fg-2); }
+.sellers-buckets { display: grid; gap: 4px; }
+.sellers-bucket { display: grid; grid-template-columns: minmax(120px, 190px) 1fr 44px; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-2); }
+.sellers-bucket-bar { display: block; height: 10px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+.sellers-bucket-bar i { display: block; height: 100%; background: var(--accent); }
+.sellers-bucket-bar i.b-week { background: #f59e0b; } .sellers-bucket-bar i.b-month { background: #d4a72c; }
+.sellers-bucket-bar i.b-quarter { background: #60a5fa; } .sellers-bucket-bar i.b-year { background: #3b82f6; }
+.sellers-bucket-bar i.b-older { background: #6366f1; } .sellers-bucket-bar i.b-received { background: #9ca3af; }
+.sellers-bucket-n { text-align: right; }
+.sellers .wrap { overflow-x: auto; }
+.sellers-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.sellers-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; padding: 4px 8px 6px; border-bottom: 1px solid var(--line); }
+.sellers-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--fg-2); }
+.sellers-table th.r, .sellers-table td.r { text-align: right; }
+.sellers-table small, .sellers-tags { color: var(--muted); font-size: 11px; }
+.sellers-table code { font-family: var(--mono); color: var(--fg); }
+.sellers-note { font-size: 11.5px; }
+@media (max-width: 720px) { .sellers-bucket { grid-template-columns: minmax(96px, 140px) 1fr 40px; } }
+
+/* the market tabs as short words only where the panel is narrow (the workspace column, a phone), so all six fit; a very narrow phone can still scroll the strip sideways */
+div.market.narrow .segtabs { gap: 1px; }
+div.market.narrow .segtabs .icon { display: none; }
+div.market.narrow .segtabs button { padding-left: 5px; padding-right: 5px; font-size: 11px; }

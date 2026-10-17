@@ -3,22 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>QMax: the best route for your Qubic trades</title>
-    <meta name="description" content="Best price on Qubic: QMax splits every order across the QX order book and the QSwap pool. Free and non-custodial, with an API and x402 payment rails for AI agents." />
+    <title>QMax: Qubic DEX aggregator, the best route for your trades</title>
+    <meta name="description" content="A free, non-custodial Qubic DEX aggregator. QMax splits every order across the QX order book and the QSwap pool for the best price. API and x402 rails for AI agents." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://qmax.exchange/" />
     <meta name="theme-color" content="#070a0f" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="QMax" />
     <meta property="og:url" content="https://qmax.exchange/" />
-    <meta property="og:title" content="QMax: the best route for your Qubic trades" />
+    <meta property="og:title" content="QMax: Qubic DEX aggregator, the best route for your trades" />
     <meta property="og:description" content="Splits every order across the QX order book and the QSwap pool for the best price. Free, non-custodial, with an API and x402 rails for AI agents." />
     <meta property="og:image" content="https://qmax.exchange/brand/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="QMax: the best route for your Qubic trades" />
+    <meta property="og:image:alt" content="QMax: Qubic DEX aggregator, the best route for your trades" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="QMax: the best route for your Qubic trades" />
+    <meta name="twitter:title" content="QMax: Qubic DEX aggregator, the best route for your trades" />
     <meta name="twitter:description" content="Splits every order across QX and QSwap for the best price. Free, non-custodial, with an API and x402 rails for AI agents." />
     <meta name="twitter:image" content="https://qmax.exchange/brand/og.png" />
     <!-- For agents and the crawlers behind them: what QMax is in plain Markdown, and the API's OpenAPI document. -->
@@ -33,7 +33,9 @@
             "@id": "https://qmax.exchange/#site",
             "url": "https://qmax.exchange/",
             "name": "QMax",
-            "description": "The best route for your Qubic trades: a liquidity router across the QX order book and the QSwap pool."
+            "alternateName": "QMax Qubic DEX aggregator",
+            "description": "The best route for your Qubic trades: a DEX aggregator across the QX order book and the QSwap pool.",
+            "sameAs": ["https://github.com/profitphil/qmax"]
           },
           {
             "@type": "WebApplication",
@@ -71,20 +73,31 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
     <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=3" />
+    <style>
+      .prerender { max-width: 640px; margin: 0 auto; padding: 36px 16px; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--muted, #93a1b4); }
+      .prerender h1 { margin: 0 0 12px; font-size: 24px; line-height: 1.25; color: var(--fg, #e6ebf2); }
+      .prerender a { color: var(--accent, #78aae6); }
+      .prerender li { margin: 6px 0; }
+    </style>
     <script src="/theme-init.js"></script>
   </head>
   <body>
-    <div id="root"></div>
-    <!-- Without JavaScript (most crawlers and agents' fetchers) this is the page. -->
-    <noscript>
-      <h1>QMax: the best route for your Qubic trades</h1>
-      <p>QMax is a non-custodial trading terminal and liquidity router for Qubic. It compares the QX order book with the QSwap pool and splits your order across both for the best price. It is free, and every trade is signed in your own wallet. It needs JavaScript to run.</p>
-      <ul>
-        <li>Charts with live candles, indicators and drawing tools for every asset on QX and QSwap.</li>
-        <li>Swap QU for tokens, a portfolio, QSwap pools ranked by the fees they earn, and a Discord bot.</li>
-        <li>For AI agents: an HTTP API with an <a href="/api/v1/openapi.json">OpenAPI document</a>, x402 payment rails (Q+Pay, settled through QPayhub) and a plain-text guide at <a href="/llms.txt">/llms.txt</a>, and a downloadable <a href="/agents/">MCP server and TypeScript SDK</a>.</li>
-      </ul>
-    </noscript>
+    <div id="root">
+      <!-- This is the page for anything that does not run JavaScript (search engines' checkers, AI assistants' fetchers, a browser with scripts off), and what shows for a moment before the app
+           starts: the app replaces it. It is real page content, not hidden text, so it holds the page's main heading. -->
+      <main class="prerender">
+        <h1>QMax: the Qubic DEX aggregator</h1>
+        <p>QMax is a non-custodial trading terminal and liquidity router for Qubic. It compares the QX order book with the QSwap pool and splits your order across both for the best price. It is free, and every trade is signed in your own wallet. It needs JavaScript to run.</p>
+        <ul>
+          <li>Charts with live candles, indicators and drawing tools for every asset on QX and QSwap.</li>
+          <li>Swap QU for tokens, a portfolio, QSwap pools ranked by the fees they earn, and a Discord bot.</li>
+          <li>How much would a sale fetch? <a href="/api/v1/quote?side=sell&amp;asset=QDOGE&amp;qty=1000000">GET /api/v1/quote?side=sell&amp;asset=QDOGE&amp;qty=1000000</a> prices an order across QX and QSwap and says the result in words. Free, no key, no wallet needed.</li>
+          <li>Live prices, order books and what a sale would fetch for every Qubic token and share: <a href="/token/">all tokens</a>.</li>
+        <li>New to trading on Qubic? Read <a href="/qubic-dex/">how QX, QSwap and QMax work, what they cost, and which to use</a>.</li>
+          <li>For AI agents: an HTTP API with an <a href="/api/v1/openapi.json">OpenAPI document</a>, x402 payment rails (Q+Pay, settled through QPayhub) and a plain-text guide at <a href="/llms.txt">/llms.txt</a>, and a downloadable <a href="/agents/">MCP server and TypeScript SDK</a>.</li>
+        </ul>
+      </main>
+    </div>
     <script type="module" src="/main.tsx"></script>
   </body>
 </html>

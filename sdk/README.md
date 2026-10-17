@@ -82,8 +82,10 @@ const trade = await agentTrade({
 trade.ok;        // every step confirmed
 trade.outcome;   // what the wallet really received, read back after the trade
 ```
+- **Dry run:** `agentPlan({ ...the same options as agentTrade })` returns the quote, the steps that would be signed, the most QU that could leave the wallet and the wallet's balance, after the same checks against your limits, and signs and sends nothing. Use it to try a strategy, or to see exactly what would be signed, before using real funds.
 - `limits.maxOutlayQu` is required and is checked against the plan's worst case (venue fees included) before anything is signed. A violation throws `TradeRefused` with every problem listed (`problems`).
 - The plan can only call QX and QSwap; the payer can only pay QPayhub. A hostile or buggy server cannot make the agent send money elsewhere.
+- **Counting.** By default each order `agentTrade` signs is sent to the network *through* QMax (`POST /v1/broadcast`), which passes it on unchanged and counts it as an agent order: it learns your wallet address and the transaction id, both public on the Qubic network. If QMax cannot take an order it goes to the network directly, so this never stops a trade. Pass `reportTo: false` to send straight to the network and tell QMax nothing.
 - A session costs `session.priceQu` for `session.seconds` (see `GET /v1/x402`). Payments are single-flight, so concurrent calls share one purchase. `pay.stats()` shows the total spent; `pay.clearSession()` forgets the session.
 - Errors are `X402Error` with a `code` (`limit_per_call` and `limit_total` for your caps, `payer_wrong_destination`, `pay_failed`, `pay_no_money`, `confirm_timeout`, ...).
 - This pays real QU. Use a wallet that holds only what the agent needs.

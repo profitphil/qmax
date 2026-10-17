@@ -92,3 +92,48 @@ test("in-app browsers that often cannot open a wallet app are recognised, and or
   assert.equal(inAppBrowser("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"), true, "an iPhone web view with no Safari in its name");
   assert.equal(inAppBrowser("Mozilla/5.0 (Linux; Android 14) Chrome/126 Mobile Safari/537.36 Instagram 330.0"), true);
 });
+
+import { accountsFromNamespaces } from "../web/wallet/pairing.ts";
+
+test("the accounts a wallet listed in its session are read without asking it anything: real addresses only, once each, at most 25", () => {
+  const A = "A".repeat(59) + "B";
+  const C = "C".repeat(60);
+  assert.deepEqual(accountsFromNamespaces(undefined), []);
+  assert.deepEqual(accountsFromNamespaces({}), []);
+  assert.deepEqual(accountsFromNamespaces({ eip155: { accounts: [`eip155:1:0xabc`] } }), [], "another chain's accounts are not ours");
+  assert.deepEqual(accountsFromNamespaces({ qubic: { accounts: [`qubic:mainnet:${A}`, `qubic:mainnet:${C}`, `qubic:mainnet:${A}`] } }), [A, C]);
+  assert.deepEqual(accountsFromNamespaces({ qubic: { accounts: ["qubic:mainnet:not-an-address", "qubic:mainnet:" + "a".repeat(60), `qubic:mainnet:${C}X`, A] } }), [A], "a name that is not a plain upper-case address is dropped; a bare address is accepted");
+  const many = Array.from({ length: 40 }, (_, i) => `qubic:mainnet:${String.fromCharCode(65 + (i % 26))}${"A".repeat(58)}${String.fromCharCode(65 + Math.floor(i / 26))}`);
+  assert.equal(accountsFromNamespaces({ qubic: { accounts: many } }).length, 25);
+});
+
+import { accountPlan } from "../web/wallet/pairing.ts";
+
+test("once the wallet app is linked: its listed accounts are used at once; only without them is it asked, and the waiting screen is for a dialog that is part way through connecting", () => {
+  const A = "A".repeat(60);
+  assert.equal(accountPlan([A], false), "session", "an old link left from before: straight to the accounts, the other ways to connect one tap away");
+  assert.equal(accountPlan([A], true), "session", "back from the wallet app: it is asleep, so it is not asked");
+  assert.equal(accountPlan([], true), "ask-and-wait", "nothing listed and the person is mid-connection: ask, and say what it is waiting for");
+  assert.equal(accountPlan([], false), "ask-quietly", "nothing listed and the dialog just opened: keep the ways to connect on screen");
+});
+
+import { cleanWalletAccounts } from "../web/wallet/pairing.ts";
+
+test("what a wallet sends back for its accounts cannot break the page: only real addresses get through, once each, with a plain name", () => {
+  const A = "A".repeat(59) + "B";
+  const C = "C".repeat(60);
+  assert.deepEqual(cleanWalletAccounts(undefined), []);
+  assert.deepEqual(cleanWalletAccounts("nope"), []);
+  assert.deepEqual(cleanWalletAccounts([]), []);
+  // the answer that crashed the dialog: an entry with no address among good ones
+  assert.deepEqual(cleanWalletAccounts([{ name: "x" }, { address: A, name: "Main", amount: 1 }]), [{ address: A, name: "Main" }]);
+  assert.deepEqual(cleanWalletAccounts([null, undefined, 7, "str", { address: 5 }, { address: "short" }, { address: "a".repeat(60) }]), [], "nothing usable: nothing is offered");
+  // other likely names for the address field, a name from `alias`, markup stripped from names, repeats dropped
+  assert.deepEqual(cleanWalletAccounts([{ publicId: A, alias: "Savings" }, { identity: C, name: "<b>Hot</b> wallet\n" }, { address: A }]), [
+    { address: A, name: "Savings" },
+    { address: C, name: "bHotb wallet" },
+  ]);
+  assert.equal(cleanWalletAccounts([{ address: A, name: "n".repeat(100) }])[0].name.length, 32);
+  const many = Array.from({ length: 40 }, (_, i) => ({ address: String.fromCharCode(65 + (i % 26)).repeat(59) + String.fromCharCode(65 + Math.floor(i / 26)) }));
+  assert.equal(cleanWalletAccounts(many).length, 25);
+});

@@ -4,7 +4,9 @@ import { BASE } from "./base.ts";
 import { usageSharingOn } from "./sharing.ts";
 
 /** What `GET /v1/membership` answers: the membership read from the chain, and the wallet's profit share. */
-export interface MembershipResponse extends Membership {
+export interface MembershipResponse extends Omit<Membership, "subscription"> {
+  /** The wallet's subscription as the public answer gives it: without `discordIds` (which Discord accounts paid is the owner's to see, so the server leaves it out). */
+  subscription: Omit<Membership["subscription"], "discordIds">;
   /** Whether this membership unlocks trading on the website (a pass always does; a subscription unless the operator turned that off). */
   unlocksWebTrading: boolean;
   profitShare: {

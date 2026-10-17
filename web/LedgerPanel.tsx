@@ -4,6 +4,7 @@ import { formatPrice } from "./AssetList.tsx";
 import { LedgerError, downloadLedgerCsv, fetchLedger } from "./ledger-api.ts";
 import type { Ledger, LedgerEntry, LedgerPosition } from "./ledger-api.ts";
 import { Avatar, Icon, Spinner } from "./ui.tsx";
+import { ConnectOrView } from "./ViewWallet.tsx";
 
 const EXPLORER = "https://explorer.qubic.org/network/tx/";
 const PERIODS = [30, 90, 180] as const;
@@ -136,14 +137,7 @@ export function LedgerPanel({ walletId, assets, onConnect }: Props) {
     }
   };
 
-  if (!walletId)
-    return (
-      <div className="empty">
-        <span className="empty-icon"><Icon name="chart" size={22} /></span>
-        <p>Connect your wallet to see what you bought and sold on QX and QSwap, your profit and the fees you paid.</p>
-        {onConnect && <button className="primary" onClick={onConnect}>Connect wallet</button>}
-      </div>
-    );
+  if (!walletId) return <ConnectOrView icon="chart" text="Connect your wallet to see what you bought and sold on QX and QSwap, your profit and the fees you paid." onConnect={onConnect} />;
 
   const t = ledger?.totals;
   return (

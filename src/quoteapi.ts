@@ -1,6 +1,7 @@
 import type { MarketData } from "./data.ts";
 import type { ExecutionHint } from "./exec.ts";
 import { RouteError, plainNumber } from "./routes.ts";
+import { quoteSummary } from "./quotesummary.ts";
 import { route } from "./router.ts";
 import type { Side } from "./types.ts";
 
@@ -49,14 +50,20 @@ export async function buildQuote(data: MarketData, input: Record<string, unknown
   if (!venues) throw new RouteError(404, `Unknown asset '${q.asset}'`);
   const plan = route(opts.onlyVenue ? venues.filter((v) => v.name === opts.onlyVenue) : venues, q.side, q.qty, { split: q.split, allowTinyQswapBuy: opts.allowTinyQswapBuy });
   const onChainCheck = data_verify ? await data.verify!(q.asset, plan.allocations).catch(() => null) : undefined;
+  const fillable = plan.filledQty === plan.qty;
+  const averagePriceQu = Number.isFinite(plan.averagePrice) ? plan.averagePrice : null;
+  const legs = plan.allocations.map((a) => ({ venue: a.venue, qty: a.qty, totalQu: a.quote.netQu }));
+  const alternatives = plan.singleVenue.map((s) => ({ venue: s.venue, fillable: s.quote !== null, totalQu: s.quote?.netQu ?? null }));
   return {
     asset: q.asset.toUpperCase(),
     side: plan.side,
     qty: plan.qty,
     filledQty: plan.filledQty,
-    fillable: plan.filledQty === plan.qty,
+    fillable,
+    // The answer in words, for a person or an AI assistant that reads rather than computes (the fields below are the exact numbers).
+    summary: quoteSummary({ asset: q.asset.toUpperCase(), side: plan.side, qty: plan.qty, filledQty: plan.filledQty, fillable, totalQu: plan.totalNetQu, averagePriceQu, route: legs, alternatives }),
     totalQu: plan.totalNetQu,
-    averagePriceQu: Number.isFinite(plan.averagePrice) ? plan.averagePrice : null,
+    averagePriceQu,
     slippageBps: q.slippageBps,
     executable: assetInfo !== null,
     ...(assetInfo ? { assetInfo } : {}),

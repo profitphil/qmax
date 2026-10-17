@@ -1,3 +1,5 @@
+import { hasProfitShare, memberHow, showsMembership } from "./memberlabel.ts";
+import { otherAccounts, switchHint } from "./accounts.ts";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Icon, Logo, QubicHeart, QubicMark } from "./ui.tsx";
@@ -13,6 +15,8 @@ import { useTipJarUrl } from "./support.ts";
 
 const EXPLORER = "https://explorer.qubic.org";
 const short = (a: string) => `${a.slice(0, 5)}…${a.slice(-5)}`;
+/** The same address in a few characters less, for a phone's title bar where the wallet button shares the row with the price. */
+const shorter = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 const compact = (n: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(n);
 
 /** A flat colour derived from the address, so a wallet is recognisable at a glance. */
@@ -45,6 +49,10 @@ interface NavProps {
   connected: boolean;
   address?: string;
   alias?: string;
+  /** How the wallet is connected, and the accounts it listed: the menu offers the other accounts to switch to where that works (web/accounts.ts). */
+  connectType?: string;
+  accounts?: string[];
+  onSwitchAccount?: (address: string) => void;
   balanceQu: number | null;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -53,7 +61,7 @@ interface NavProps {
   onSupport?: () => void;
 }
 
-export function Nav({ pages, page, onPage, qu, onQubic, connected, address, alias, balanceQu, onConnect, onDisconnect, onSettings, onSupport }: NavProps) {
+export function Nav({ pages, page, onPage, qu, onQubic, connected, address, alias, connectType, accounts, onSwitchAccount, balanceQu, onConnect, onDisconnect, onSettings, onSupport }: NavProps) {
   const { theme, toggle } = useTheme();
   const tipUrl = useTipJarUrl();
   return (
@@ -73,11 +81,13 @@ export function Nav({ pages, page, onPage, qu, onQubic, connected, address, alia
           </nav>
         )}
         </div>
-        <button type="button" className="qu-chip" onClick={onQubic} title="The price of Qubic (QU) in dollars: open its chart" aria-label={qu ? `Qubic price ${usdPerQu(qu.usdPerQu)}${qu.change24hPct !== null ? `, ${qu.change24hPct >= 0 ? "up" : "down"} ${Math.abs(qu.change24hPct).toFixed(1)} percent in 24 hours` : ""}. Open the chart.` : "Qubic price. Open the chart."}>
-          <QubicMark size={18} />
-          <span className="num qu-chip-price">{qu ? usdPerQu(qu.usdPerQu) : "–"}</span>
-          {qu?.change24hPct != null && <span className={`num qu-chip-change ${qu.change24hPct > 0.05 ? "up" : qu.change24hPct < -0.05 ? "down" : ""}`}>{qu.change24hPct > 0.05 ? "▲" : qu.change24hPct < -0.05 ? "▼" : ""}{Math.abs(qu.change24hPct).toFixed(1)}%</span>}
-        </button>
+        <div className="nav-mid">
+          <button type="button" className="qu-chip" onClick={onQubic} title="The price of Qubic (QU) in dollars: open its chart" aria-label={qu ? `Qubic price ${usdPerQu(qu.usdPerQu)}${qu.change24hPct !== null ? `, ${qu.change24hPct >= 0 ? "up" : "down"} ${Math.abs(qu.change24hPct).toFixed(1)} percent in 24 hours` : ""}. Open the chart.` : "Qubic price. Open the chart."}>
+            <QubicMark size={18} />
+            <span className="num qu-chip-price">{qu ? usdPerQu(qu.usdPerQu) : "–"}</span>
+            {qu?.change24hPct != null && <span className={`num qu-chip-change ${qu.change24hPct > 0.05 ? "up" : qu.change24hPct < -0.05 ? "down" : ""}`}>{qu.change24hPct > 0.05 ? "▲" : qu.change24hPct < -0.05 ? "▼" : ""}{Math.abs(qu.change24hPct).toFixed(1)}%</span>}
+          </button>
+        </div>
         <div className="nav-actions">
           {tipUrl ? (
             <a className="navlink nav-heart" href={tipUrl} target="_blank" rel="noreferrer" title="Tip QMax with Q+Pay. QMax is free for everyone." aria-label="Tip QMax with Q+Pay">
@@ -100,7 +110,7 @@ export function Nav({ pages, page, onPage, qu, onQubic, connected, address, alia
             <Icon name="sliders" />
           </button>
           {connected && address ? (
-            <WalletMenu address={address} alias={alias} balanceQu={balanceQu} onDisconnect={onDisconnect} />
+            <WalletMenu address={address} alias={alias} connectType={connectType} accounts={accounts} onSwitch={onSwitchAccount} balanceQu={balanceQu} onDisconnect={onDisconnect} />
           ) : (
             <button className="primary" onClick={onConnect}>
               <Icon name="wallet" size={15} /> <span>Connect<span className="hide-sm"> wallet</span></span>
@@ -112,11 +122,13 @@ export function Nav({ pages, page, onPage, qu, onQubic, connected, address, alia
   );
 }
 
-function WalletMenu({ address, alias, balanceQu, onDisconnect }: { address: string; alias?: string; balanceQu: number | null; onDisconnect: () => void }) {
+function WalletMenu({ address, alias, connectType, accounts, onSwitch, balanceQu, onDisconnect }: { address: string; alias?: string; connectType?: string; accounts?: string[]; onSwitch?: (address: string) => void; balanceQu: number | null; onDisconnect: () => void }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const { membership, refresh } = useMembership(address);
+  const others = otherAccounts(connectType, address, accounts);
+  const hint = switchHint(connectType);
   // Read again each time the menu is opened, so a payment made a minute ago on Discord shows.
   useEffect(() => {
     if (open) refresh();
@@ -149,7 +161,7 @@ function WalletMenu({ address, alias, balanceQu, onDisconnect }: { address: stri
       <button className="walletpill" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} title={address}>
         <span className="identicon" style={{ background: identicon(address) }} />
         <span className="walletpill-text">
-          <b>{alias || short(address)}</b>
+          <b>{alias ? <span className="addr-alias">{alias}</span> : <><span className="addr-full">{short(address)}</span><span className="addr-short">{shorter(address)}</span></>}</b>
           {balanceQu !== null && <small>{compact(balanceQu)} QU</small>}
         </span>
         <Icon name="chevron" size={14} />
@@ -168,6 +180,28 @@ function WalletMenu({ address, alias, balanceQu, onDisconnect }: { address: stri
           {tallyLine(loadTally(address)) && (
             <p className="menu-saved"><Icon name="bolt" size={13} fill /> {tallyLine(loadTally(address))}</p>
           )}
+          {others.length > 0 && onSwitch && (
+            <div className="menu-accounts" role="group" aria-label="Switch account">
+              <p className="menu-accounts-head">Switch account</p>
+              <div className="menu-accounts-list">
+                {others.map((a) => (
+                  <button
+                    key={a}
+                    className="menu-item"
+                    role="menuitem"
+                    title={a}
+                    onClick={() => {
+                      setOpen(false);
+                      onSwitch(a);
+                    }}
+                  >
+                    <span className="identicon" style={{ background: identicon(a) }} /> <code>{short(a)}</code>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {others.length === 0 && hint && <p className="menu-saved">{hint}</p>}
           <button className="menu-item" role="menuitem" onClick={copy}>
             <Icon name={copied ? "check" : "copy"} size={16} /> {copied ? "Copied" : "Copy address"}
           </button>
@@ -197,9 +231,9 @@ const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "num
 export function MemberBlock({ m }: { m: MembershipResponse | null }) {
   if (!m) return null;
   const share = m.profitShare;
-  const earned = !!share && (share.earnedQu > 0 || share.paidQu > 0 || share.thisMonth.estimatedQu > 0);
-  if (!m.active && !earned) return null;
-  const how = m.source === "subscription" ? (m.subscription.discordIds.length ? "Subscriber (paid through Discord)" : "Subscriber") : m.source === "pass" ? "Pass holder" : "Not a member right now";
+  const earned = hasProfitShare(m);
+  if (!showsMembership(m)) return null;
+  const how = memberHow(m);
   return (
     <div className="menu-member" aria-label="Membership">
       <p className="menu-member-head">
@@ -209,15 +243,15 @@ export function MemberBlock({ m }: { m: MembershipResponse | null }) {
       {share && earned && (
         <dl className="menu-member-share" title={share.note}>
           <dt>Profit share this month (estimate)</dt>
-          <dd>{qu(share.thisMonth.estimatedQu)}</dd>
+          <dd>{qu(share.thisMonth?.estimatedQu ?? 0)}</dd>
           <dt>Earned in finished months</dt>
-          <dd>{qu(share.earnedQu)}</dd>
+          <dd>{qu(share.earnedQu ?? 0)}</dd>
           <dt>Paid to you</dt>
-          <dd>{qu(share.paidQu)}</dd>
-          {share.owedQu > 0 && (
+          <dd>{qu(share.paidQu ?? 0)}</dd>
+          {(share.owedQu ?? 0) > 0 && (
             <>
               <dt>Waiting to be paid</dt>
-              <dd className="owed">{qu(share.owedQu)}</dd>
+              <dd className="owed">{qu(share.owedQu ?? 0)}</dd>
             </>
           )}
         </dl>
@@ -281,6 +315,7 @@ export function StatusBar({ onSupport }: { onSupport?: () => void }) {
           <Icon name="heart" size={11} /> Support QMax
         </button>
       )}
+      <a className="sb-link" href="/agents/" title="The free API, an MCP server and an SDK: quotes, order books and trade plans for scripts and AI agents">API &amp; agents</a>
       <a className="sb-link" href={EXPLORER} target="_blank" rel="noreferrer">Qubic Explorer</a>
     </footer>
   );

@@ -11,6 +11,8 @@ export interface QuoteResponse extends ExecutableQuote {
   qty: number;
   filledQty: number;
   fillable: boolean;
+  /** The quote said in words: the total, the average, where the order goes and what the splitting is worth. For anyone who reads rather than computes; the fields hold the exact numbers. */
+  summary?: string;
   executable: boolean;
   totalQu: number;
   averagePriceQu: number | null;

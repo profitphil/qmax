@@ -58,6 +58,8 @@ test("live adapter reads fees, pages the QX book and parses the pool", async () 
   const qx = venues[0].quote("buy", 2565)!; // 256*10 + 5 shares needs the second page
   assert.ok(qx);
   assert.equal(venues[0].quote("sell", 100)!.fixedCostQu, 0, "QX takes no flat fee on an order");
+  assert.equal((venues[0] as unknown as { book(): { asks: { ownerKey?: string }[]; bids: { ownerKey?: string }[] } }).book().asks[0].ownerKey, "01".repeat(32), "each order carries its wallet's key, as the contract returns it");
+  assert.equal((venues[0] as unknown as { book(): { bids: { ownerKey?: string }[] } }).book().bids[0].ownerKey, "01".repeat(32));
   const plan = route(venues, "buy", 500);
   assert.ok(plan.filledQty === 500);
 });

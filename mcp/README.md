@@ -4,7 +4,17 @@ QMax for AI agents: market data, quotes, routing, candles, pools, backtests and 
 
 No tool signs or sends anything. `qmax_build_plan` returns the transactions a quote needs, in order, for the caller's own wallet to sign (or for `@qmax/sdk/agent`, which has spending limits built in). Every tool is marked read-only.
 
-## Get it (hosted)
+## Connect to the hosted server (nothing to install)
+`https://qmax.exchange/api/mcp` is the same server over MCP's Streamable HTTP transport (`src/mcphost.ts`, `mcp/create.ts`): stateless, free, no key and no Node. It has every tool except the paid `qmax_best_position` (a Max plan is paid for by the caller's own wallet through x402, which a hosted endpoint cannot do for them). The tools call the API on the loopback address and name the caller's address in `X-Forwarded-For`, so the free per-address limits apply to what an assistant does through MCP just as to a direct call; the MCP calls themselves are limited to 120 a minute per address.
+```bash
+claude mcp add --transport http qmax https://qmax.exchange/api/mcp
+```
+```json
+{ "mcpServers": { "qmax": { "url": "https://qmax.exchange/api/mcp" } } }
+```
+`MCP_HOSTED=off` on the server stops serving it. `mcp/server.json` is the entry for the official MCP registry.
+
+## Get it (download)
 The built server is one file, hosted on the site with its checksum: see [qmax.exchange/agents](https://qmax.exchange/agents/).
 ```bash
 curl -O https://qmax.exchange/agents/qmax-mcp.mjs

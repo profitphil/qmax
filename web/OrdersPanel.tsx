@@ -7,6 +7,7 @@ import type { AssetItem } from "./client.ts";
 import { formatPrice } from "./AssetList.tsx";
 import { fetchRestingOrders } from "./exec/chain.ts";
 import { runSteps } from "./exec/run.ts";
+import { ConnectOrView } from "./ViewWallet.tsx";
 import type { StepState } from "./exec/run.ts";
 import { useQubicConnect } from "./wallet/QubicConnectContext.tsx";
 import { Avatar, Icon, Modal, Spinner } from "./ui.tsx";
@@ -19,13 +20,15 @@ interface Props {
   assets: AssetItem[];
   refreshKey: number;
   onConnect: () => void;
+  /** The wallet is one being looked at, not the connected one: the orders are shown but cannot be cancelled. */
+  readOnly?: boolean;
   /** Reports how many orders are open, for the tab badge. */
   onCount: (n: number) => void;
   onChanged: () => void;
 }
 
 /** The wallet's resting QX orders, with a one-tap cancel. */
-export function OrdersPanel({ walletId, assets, refreshKey, onConnect, onCount, onChanged }: Props) {
+export function OrdersPanel({ walletId, assets, readOnly = false, refreshKey, onConnect, onCount, onChanged }: Props) {
   const [orders, setOrders] = useState<RestingOrder[] | null>(null);
   const [error, setError] = useState("");
   const [cancelling, setCancelling] = useState<RestingOrder | null>(null);
@@ -63,14 +66,7 @@ export function OrdersPanel({ walletId, assets, refreshKey, onConnect, onCount, 
     return m;
   }, [assets]);
 
-  if (!walletId)
-    return (
-      <div className="empty">
-        <span className="empty-icon"><Icon name="wallet" size={22} /></span>
-        <p>Connect your wallet to see your open orders.</p>
-        <button className="primary" onClick={onConnect}>Connect wallet</button>
-      </div>
-    );
+  if (!walletId) return <ConnectOrView icon="wallet" text="Connect your wallet to see your open orders." onConnect={onConnect} />;
   if (error) return <div className="banner err" role="alert"><Icon name="alert" size={16} /> <span>{error}</span></div>;
   if (orders === null) return <p className="status-line"><Spinner size={14} /> Reading your orders from QX…</p>;
   if (orders.length === 0)
@@ -99,12 +95,12 @@ export function OrdersPanel({ walletId, assets, refreshKey, onConnect, onCount, 
                 </div>
               </div>
               <div className="locked">{locked > 0 ? <>{n(locked)} QU <small>locked</small></> : <small>shares listed</small>}</div>
-              <button className="ghost" onClick={() => setCancelling(o)}>Cancel</button>
+              {!readOnly && <button className="ghost" onClick={() => setCancelling(o)}>Cancel</button>}
             </li>
           );
         })}
       </ul>
-      {cancelling && (
+      {cancelling && !readOnly && (
         <CancelModal
           order={cancelling}
           walletId={walletId}

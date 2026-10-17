@@ -18,7 +18,8 @@ const api = process.env.AGENTS_API_URL ?? "https://qmax.exchange/api";
 const FILES = ["qmax-mcp.mjs", "qmax-sdk.js", "qmax-sdk.tgz"];
 
 mkdirSync(out, { recursive: true });
-for (const f of [...FILES, "SHA256SUMS"]) rmSync(join(out, f), { force: true });
+// (a signature made for an earlier list would no longer match, so it goes too: scripts/sign-release.sh makes a new one)
+for (const f of [...FILES, "SHA256SUMS", "SHA256SUMS.minisig"]) rmSync(join(out, f), { force: true });
 
 // The MCP server: one file, run with Node. It reads no file and no secret of ours; QMAX_API_KEY and QMAX_AGENT_SEED come from the user's own environment.
 await build({

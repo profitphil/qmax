@@ -5,6 +5,7 @@ import { QX_CONTRACT, QSWAP_CONTRACT, decodeTrade } from "./events.ts";
 import type { EventLog } from "./events.ts";
 import { assetNameFromU64, identityToBytes } from "./identity.ts";
 import { QX_ID, QSWAP_ID, contractIndexOf } from "./ledger.ts";
+import { classifyCall } from "./orderkinds.ts";
 import { QPAYHUB_MIN_PAYMENT_QU } from "./qpay.ts";
 import { QPAYHUB_IDENTITY, SESSION_RESOURCE_ID, resourceTag } from "./x402.ts";
 import { readResource } from "./procover.ts";
@@ -31,8 +32,11 @@ export interface TradeRecord {
   ref?: string;
   channel: Channel;
   venue: "QX" | "QSwap";
-  /** `trade`: something changed hands. `liquidity`: QSwap liquidity was added or removed (no price, so no volume). */
-  kind: "trade" | "liquidity";
+  /**
+   * `trade`: something changed hands. `order`: a QX order was placed and nothing filled yet (it rests on the book; `qu` is its worth at its price, not volume, and `fills` is 0).
+   * `liquidity`: QSwap liquidity was added or removed (no price, so no volume).
+   */
+  kind: "trade" | "liquidity" | "order";
   side?: "buy" | "sell";
   /** The asset that traded most, by name (the part before any dot is the symbol). */
   asset?: string;
@@ -146,18 +150,7 @@ const REFRESH_LOOKUPS = 40;
  */
 const EVENTS_GRACE_MS = 6 * 3_600_000;
 
-/** What a transaction to QX or QSwap is, from its procedure number (Qx.h and Qswap.h). */
-export function classifyCall(venue: "QX" | "QSwap", inputType: number): { kind: "trade" | "liquidity"; side?: "buy" | "sell" } | null {
-  if (venue === "QX") {
-    if (inputType === 6) return { kind: "trade", side: "buy" }; // AddToBidOrder
-    if (inputType === 5) return { kind: "trade", side: "sell" }; // AddToAskOrder
-    return null; // cancelling an order, moving shares, transfers, or reading
-  }
-  if (inputType === 6 || inputType === 7) return { kind: "trade", side: "buy" }; // QU in
-  if (inputType === 8 || inputType === 9) return { kind: "trade", side: "sell" }; // asset in
-  if (inputType === 4 || inputType === 5) return { kind: "liquidity" };
-  return null;
-}
+export { classifyCall };
 
 const venueOf = (destination: string): "QX" | "QSwap" | null => {
   if (destination === QX_ID || contractIndexOf(destination) === QX_CONTRACT) return "QX";
@@ -286,7 +279,11 @@ export async function verifyTrade(archive: Archive, tx: string, wallet: string, 
   }
 
   const fills = events.map(decodeTrade).filter((f): f is NonNullable<typeof f> => f !== null);
-  if (!fills.length) return { ok: false, retry: false, reason: "no-effect" };
+  if (!fills.length) {
+    // Nothing filled. A QX order may still have been placed and be resting on the book: that is an order QMax originated, counted apart from fills.
+    const resting = venue === "QX" && call.side ? restingOrder(found, call.side, events) : null;
+    return resting ? { ok: true, record: { ...base, kind: "order", side: call.side, asset: resting.asset, qty: resting.qty, qu: resting.qu, fills: 0 } } : { ok: false, retry: false, reason: "no-effect" };
+  }
   // One transaction can touch several assets only by accident; name the one with the most QU.
   const byKey = new Map<string, { qu: number; qty: number }>();
   for (const f of fills) {
@@ -298,6 +295,36 @@ export async function verifyTrade(archive: Archive, tx: string, wallet: string, 
   const [mainKey, main] = [...byKey.entries()].sort((a, b) => b[1].qu - a[1].qu)[0];
   const qu = fills.reduce((s, f) => s + f.qu, 0);
   return { ok: true, record: { ...base, kind: "trade", ...(call.side ? { side: call.side } : {}), asset: assetNameFromU64(BigInt(mainKey.split("|")[0])), qty: main.qty, qu, fills: fills.length } };
+}
+
+/**
+ * What a QX order transaction asked for, read from its input: the asset (its 32-byte issuer, then its name as a 64-bit number), the price and the number of shares (64-bit each).
+ * Null when the input is missing, too short, or has a price or size that is not positive.
+ */
+export function decodeQxOrder(inputData: string | undefined): { asset: string; price: number; qty: number } | null {
+  if (!inputData) return null;
+  const b = Buffer.from(inputData, "base64");
+  if (b.length < 56) return null;
+  const price = b.readBigInt64LE(40);
+  const qty = b.readBigInt64LE(48);
+  if (price <= 0n || qty <= 0n) return null;
+  return { asset: assetNameFromU64(b.readBigUInt64LE(32)), price: Number(price), qty: Number(qty) };
+}
+
+/**
+ * Whether a QX order that filled nothing was placed all the same, and what it was. The transaction must be a readable order. A buy carries its QU with it, and if the contract gave all of
+ * it straight back (a refused order: the events show a transfer from QX to the wallet for the whole amount) nothing was placed. A sell carries nothing to refund, so the transaction
+ * having been included is all there is to go on: an order QX refused afterwards (rare, since the app checks the balance and holdings first) would be counted here.
+ */
+export function restingOrder(found: ArchiveTx, side: "buy" | "sell", events: ChainEvent[]): { asset: string; qty: number; qu: number } | null {
+  const order = decodeQxOrder(found.inputData);
+  if (!order) return null;
+  if (side === "buy") {
+    const sent = Number(found.amount);
+    const back = events.reduce((sum, e) => (e.quTransfer && e.quTransfer.destination === found.source && venueOf(e.quTransfer.source) === "QX" ? sum + Number(e.quTransfer.amount) : sum), 0);
+    if (sent > 0 && back >= sent) return null;
+  }
+  return { asset: order.asset, qty: order.qty, qu: order.price * order.qty };
 }
 
 /* ---------- payments to QMax, read from QPayhub ---------- */
@@ -698,15 +725,30 @@ export class UsageLog {
 /* ---------- the numbers ---------- */
 
 interface Bucket {
+  /** Orders that filled (something changed hands). */
   trades: number;
+  /** Every order or swap placed: the ones that filled and the QX orders still resting. This is the "orders that began in QMax" number. */
+  orders: number;
+  /** QX orders placed that had not filled when they were looked at, and the QU they are worth at their prices (not volume). */
+  resting: number;
+  restingQu: number;
   wallets: number;
+  /** QU that really changed hands: fills only. */
   quVolume: number;
 }
 
 /** Totals over a list of trade records. */
 function bucket(records: TradeRecord[]): Bucket {
   const trades = records.filter((r) => r.kind === "trade");
-  return { trades: trades.length, wallets: new Set(records.map((r) => r.wallet)).size, quVolume: trades.reduce((s, r) => s + r.qu, 0) };
+  const resting = records.filter((r) => r.kind === "order");
+  return {
+    trades: trades.length,
+    orders: trades.length + resting.length,
+    resting: resting.length,
+    restingQu: resting.reduce((s, r) => s + r.qu, 0),
+    wallets: new Set(records.map((r) => r.wallet)).size,
+    quVolume: trades.reduce((s, r) => s + r.qu, 0),
+  };
 }
 
 function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
@@ -721,7 +763,7 @@ function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
 }
 
 const NOTE =
-  "Verified from the chain: each trade was sent by that wallet to QX or QSwap and really filled, and was reported within 30 minutes. It proves the wallet made the trade, not that it went through QMax (anyone can name a real recent trade), so use it to measure usage, not to pay anyone. Orders that rest on the book without filling are not counted, nor is a later fill of them. Counting began at 'since'.";
+  "Verified from the chain: each trade was sent by that wallet to QX or QSwap and really filled (an order that rests unfilled counts as an order, not a trade), and was reported within 30 minutes. It proves the wallet made the trade, not that it went through QMax (anyone can name a real recent trade), so use it to measure usage, not to pay anyone. A QX order that rests unfilled is counted once, as a resting order, when it is placed (orders = trades + resting); a later fill of it is not counted again, because the fill's own transaction was not sent by this wallet. Counting began at 'since'.";
 
 export function summarizeWallet(data: UsageData, wallet: string) {
   const mine = Object.values(data.trades).filter((r) => r.wallet === wallet).sort((a, b) => b.t - a.t);

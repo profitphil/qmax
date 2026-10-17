@@ -6,19 +6,12 @@ import { useProAccess } from "./exec/pro.ts";
 import type { ProServerStatus } from "./pro-api.ts";
 import { ProModal } from "./ProModal.tsx";
 import { useQubicConnect } from "./wallet/QubicConnectContext.tsx";
+import { MAX_KEY, readMaxOn } from "./maxon.ts";
 
-const KEY = "qmax.max.on";
-
-const readOn = (): boolean => {
-  try {
-    return localStorage.getItem(KEY) === "1";
-  } catch {
-    return false;
-  }
-};
+const readOn = (): boolean => readMaxOn(typeof localStorage === "undefined" ? null : localStorage);
 const writeOn = (on: boolean) => {
   try {
-    localStorage.setItem(KEY, on ? "1" : "0");
+    localStorage.setItem(MAX_KEY, on ? "1" : "0");
   } catch {
     // not remembered: it still holds until the page is reloaded
   }
@@ -39,7 +32,7 @@ export interface MaxMode {
 const Context = createContext<MaxMode>({ active: false, access: { allowed: true, state: "free", charging: false }, setOn: () => {}, toggle: () => {}, cover: null, refreshPass: () => {} });
 
 /**
- * Max mode: one switch for the whole app. Off, Buy, Sell and Swap are the ordinary trades. On, the order panel gets a Max button that searches the best position
+ * Max mode: one switch for the whole app, on unless the person switched it off in Settings. Off, Buy, Sell and Swap are the ordinary trades. On, the order panel gets a Max button that searches the best position
  * for the trade (best way to execute, best size, arbitrage, best exit), and Swap can swap one asset for another. Max is free for everyone; only a site built with
  * `VITE_PRO_MODE=paid` and a price asks for a Pro pass when it is switched on.
  */

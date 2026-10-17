@@ -1,3 +1,4 @@
+import { ViewWalletForm } from "./ViewWallet.tsx";
 import { useEffect, useState } from "react";
 import type { AssetItem } from "./client.ts";
 import { fetchPositions } from "./liquidity-api.ts";
@@ -17,6 +18,8 @@ interface Props {
   assets: AssetItem[];
   onAdd(asset: AssetItem): void;
   onRemove(asset: AssetItem): void;
+  /** The wallet is one being looked at, not the connected one: the positions are shown with no way to add or remove. */
+  readOnly?: boolean;
   /** Change it to read the positions again (after adding or removing, say). */
   reloadKey?: number;
 }
@@ -25,7 +28,7 @@ interface Props {
  * The wallet's QSwap liquidity: every pool it has a share of, what that share is worth at the pool's price, and buttons to add
  * to it or take it out. Read live from the QSwap contract through the API (cached there for 30 seconds).
  */
-export function PoolPositions({ walletId, assets, onAdd, onRemove, reloadKey = 0 }: Props) {
+export function PoolPositions({ walletId, assets, onAdd, onRemove, readOnly = false, reloadKey = 0 }: Props) {
   const [data, setData] = useState<PositionsResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,6 +76,7 @@ export function PoolPositions({ walletId, assets, onAdd, onRemove, reloadKey = 0
         <div className="empty liqpos-empty">
           <span className="empty-icon"><Icon name="wallet" size={22} /></span>
           <p>Connect a wallet to see the pools you provide liquidity to.</p>
+          <ViewWalletForm compact label="Or look at any wallet without connecting one" />
         </div>
       )}
 
@@ -134,10 +138,12 @@ export function PoolPositions({ walletId, assets, onAdd, onRemove, reloadKey = 0
                     <dd className="num">{n(p.earnedFeesQu)} QU</dd>
                   </div>
                 </dl>
-                <span className="liqpos-actions">
-                  <button className="ghost" disabled={!a} onClick={() => a && onAdd(a)}>Add</button>
-                  <button className="ghost" disabled={!a} onClick={() => a && onRemove(a)}>Remove</button>
-                </span>
+                {!readOnly && (
+                  <span className="liqpos-actions">
+                    <button className="ghost" disabled={!a} onClick={() => a && onAdd(a)}>Add</button>
+                    <button className="ghost" disabled={!a} onClick={() => a && onRemove(a)}>Remove</button>
+                  </span>
+                )}
               </li>
             );
           })}

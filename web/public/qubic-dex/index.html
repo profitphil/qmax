@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trading on Qubic: QX, QSwap and the QMax DEX aggregator</title>
+    <meta name="description" content="How buying and selling Qubic tokens works: the QX order book, QSwap pools, their fees, and how QMax, a free DEX aggregator, routes an order across both." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://qmax.exchange/qubic-dex/" />
+    <meta name="theme-color" content="#070a0f" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="QMax" />
+    <meta property="og:url" content="https://qmax.exchange/qubic-dex/" />
+    <meta property="og:title" content="Trading on Qubic: QX, QSwap and the QMax DEX aggregator" />
+    <meta property="og:description" content="The QX order book, QSwap pools, their fees, and how QMax routes an order across both for the best price." />
+    <meta property="og:image" content="https://qmax.exchange/brand/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="QMax for AI agents (llms.txt)" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Article",
+            "@id": "https://qmax.exchange/qubic-dex/#article",
+            "headline": "Trading on Qubic: QX, QSwap and the QMax DEX aggregator",
+            "description": "How buying and selling Qubic tokens works: the QX order book, QSwap pools, their fees, and how QMax routes an order across both.",
+            "inLanguage": "en",
+            "dateModified": "2026-10-16",
+            "mainEntityOfPage": "https://qmax.exchange/qubic-dex/",
+            "about": { "@id": "https://qmax.exchange/#app" },
+            "publisher": { "@id": "https://qmax.exchange/#site" }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://qmax.exchange/qubic-dex/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Where can I buy and sell tokens on Qubic?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Tokens and smart-contract shares on Qubic trade on two on-chain markets: the QX order book and the QSwap liquidity pools. Websites such as QMax let you trade on both from one screen, signing every trade in your own wallet." }
+              },
+              {
+                "@type": "Question",
+                "name": "What is a Qubic DEX aggregator?",
+                "acceptedAnswer": { "@type": "Answer", "text": "A DEX aggregator compares several markets and sends an order where it is cheapest, splitting it when that is better. QMax compares the QX order book with the QSwap pool for the same asset and can split one order across both." }
+              },
+              {
+                "@type": "Question",
+                "name": "Does QMax charge a fee?",
+                "acceptedAnswer": { "@type": "Answer", "text": "No. QMax adds no fee to a trade and is free to use. The markets' own fees still apply: QX takes 0.3% of a match, and QSwap takes 0.3% of a swap plus a flat 100,000 QU per swap." }
+              },
+              {
+                "@type": "Question",
+                "name": "Does QMax hold my funds or keys?",
+                "acceptedAnswer": { "@type": "Answer", "text": "No. QMax is non-custodial: every transaction is signed in your own wallet, and QMax never signs or sends a transaction for anyone." }
+              },
+              {
+                "@type": "Question",
+                "name": "Which is better for trading Qubic tokens, QX or QSwap?",
+                "acceptedAnswer": { "@type": "Answer", "text": "It depends on the asset and the size of the trade. QX lets you name your price with a limit order. QSwap fills a swap at once from a pool, but its price moves with the size of the trade and it adds a flat fee per swap. The two often quote different prices for the same asset, which is why comparing them pays." }
+              },
+              {
+                "@type": "Question",
+                "name": "How much would I get for selling a large amount of a Qubic token?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Ask QMax for a quote: open the asset on qmax.exchange and type the amount (no wallet is needed to see a quote), or call the free API at https://qmax.exchange/api/v1/quote?side=sell&asset=QDOGE&qty=50000000. It prices the whole order across the QX order book and the QSwap pool, shows how it splits, and says the result in words. A large sale moves the price, so the total is usually well below the listed price times the quantity." }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I look at a Qubic wallet's portfolio without connecting it?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. QMax's portfolio screens accept any Qubic address and show its holdings, open orders, trade history and pool positions read-only. Nothing is signed and no wallet is connected." }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <style>
+      :root { color-scheme: dark; --bg: #070a0f; --panel: #0e141c; --line: #1c2633; --fg: #e6ebf2; --muted: #93a1b4; --accent: #78aae6; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      main { max-width: 780px; margin: 0 auto; padding: 32px 16px 64px; }
+      h1 { font-size: 27px; line-height: 1.25; margin: 0 0 8px; }
+      h2 { font-size: 19px; margin: 38px 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+      p, li { color: var(--muted); }
+      p strong, li strong, b { color: var(--fg); }
+      a { color: var(--accent); }
+      nav a { margin-right: 14px; }
+      .lead { font-size: 16.5px; }
+      .updated { font-size: 13px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 10px 0; }
+      td, th { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+      th { color: var(--fg); }
+      .cta { display: inline-block; margin: 6px 0 0; padding: 9px 16px; border-radius: 4px; background: var(--accent); color: #07101c; font-weight: 600; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav aria-label="Site"><a href="/">QMax</a><a href="/agents/">For AI agents</a><a href="/llms.txt">llms.txt</a><a href="https://github.com/profitphil/qmax">Source code</a></nav>
+
+      <h1>Trading on Qubic: QX, QSwap and the QMax DEX aggregator</h1>
+      <p class="lead">
+        Tokens and smart-contract shares on Qubic trade on two markets that run on the network itself: <strong>QX</strong>, an order book, and <strong>QSwap</strong>, a set of liquidity pools.
+        This page explains how each works, what they cost, and how <strong>QMax</strong>, a free and non-custodial DEX aggregator for Qubic, routes an order across both.
+      </p>
+      <p class="updated">Fees and behaviour below are as of 2026-10-16.</p>
+      <a class="cta" href="/">Open QMax</a>
+
+      <h2>Where can I buy and sell tokens on Qubic?</h2>
+      <p>
+        There is no company exchange holding your coins. QX and QSwap are smart contracts on the Qubic network, so any website can offer trading on them and every trade is signed in the
+        trader's own wallet. Prices are quoted in QU, Qubic's coin, and quantities are whole units of an asset. A website that works with both markets can show you where each asset is cheaper.
+      </p>
+
+      <h2>What is QX?</h2>
+      <p>
+        QX is Qubic's order-book exchange (smart contract 1). People place <strong>buy</strong> and <strong>sell orders at prices they choose</strong>, and an order that meets one on the other side
+        fills at once. An order nobody has taken yet waits on the book until it fills or its owner cancels it. QX takes a <strong>0.3% fee</strong> on each match, which the contract takes from the
+        seller's QU; it has no flat fee on an order. Moving shares between contracts costs a small transfer fee as a step of its own. QX is the place for limit orders and for assets with an active book.
+      </p>
+
+      <h2>What is QSwap?</h2>
+      <p>
+        QSwap (smart contract 13) is an automated market maker: each pool holds QU and one asset, and a swap is priced from the pool's reserves (a constant-product pool, as in Uniswap V2). A swap fills <strong>immediately</strong>,
+        even for an asset with no one to trade against on QX, but the price moves as the trade gets bigger. QSwap takes a <strong>0.3% fee</strong> on a swap plus a
+        <strong>flat 100,000 QU per swap</strong>, which makes very small trades dear there. People who add liquidity to a pool earn a share of those fees.
+      </p>
+
+      <h2>Which is better for trading Qubic tokens, QX or QSwap?</h2>
+      <table>
+        <tr><th></th><th>QX (order book)</th><th>QSwap (pools)</th></tr>
+        <tr><td>How it prices</td><td>The orders people placed</td><td>The pool's reserves</td></tr>
+        <tr><td>Your own price</td><td>Yes: limit orders</td><td>No: a swap fills at the pool's price</td></tr>
+        <tr><td>Speed</td><td>At once if an order matches, otherwise you wait</td><td>At once, if the pool is deep enough</td></tr>
+        <tr><td>Fees</td><td>0.3% of a match</td><td>0.3% plus a flat 100,000 QU per swap</td></tr>
+        <tr><td>Weak spot</td><td>A thin book: few orders, wide gaps</td><td>Price impact on big trades; the flat fee on small ones</td></tr>
+      </table>
+      <p>
+        Neither always wins. The same asset often has a different price on each, and which is cheaper changes with the size of the trade: a small buy can be cheaper on a thin book, a big one on a deep pool.
+        That gap is the reason to compare both before you trade.
+      </p>
+
+      <h2>What is a Qubic DEX aggregator?</h2>
+      <p>
+        A DEX aggregator compares the markets for an asset and sends your order where it costs least. <strong>QMax compares the QX order book with the QSwap pool for the same asset and can split one
+        order across both</strong>, showing each leg's price, size and fees before you sign. It adds <strong>no fee of its own</strong>. Every asset it lists has <a href="/token/">its own page</a> with the live price, the order book and pool, and what selling or buying a few sizes would fetch. It also offers charts with live candles and indicators for every asset,
+        QU swaps, limit orders on QX, a portfolio that shows what your holdings would really fetch if sold now, QSwap pools ranked by the fees they earn, and a Discord bot.
+      </p>
+
+      <h2>How do I buy or sell a Qubic token with QMax?</h2>
+      <ol>
+        <li>Open <a href="/">qmax.exchange</a> and pick an asset from the list.</li>
+        <li>Connect your Qubic wallet (the Qubic Wallet app through WalletConnect, its browser extension, the MetaMask Snap, or a vault file).</li>
+        <li>Enter an amount and choose a market order, or a limit order at your own price on QX.</li>
+        <li>Review the route QMax found: which markets, how much on each, the fees and the limits.</li>
+        <li>Approve in your wallet. QMax sends the signed order to the network and shows you what really happened.</li>
+      </ol>
+
+      <h2>How much would I get for selling a large amount of a Qubic token?</h2>
+      <p>
+        Less than the listed price times the quantity, because a big sale uses up the best orders and moves the pool's price. The way to know is to ask for a <strong>quote for the whole amount</strong>:
+        open the asset on <a href="/">qmax.exchange</a> and type the amount (you do not need to connect a wallet to see it), or fetch it as JSON from the free API, for example
+        <a href="/api/v1/quote?side=sell&amp;asset=QDOGE&amp;qty=50000000"><code>/api/v1/quote?side=sell&amp;asset=QDOGE&amp;qty=50000000</code></a> for 50 million QDOGE. It prices the order across QX and QSwap,
+        shows how it is split, and says the result in words. For a very large holding it is often better to sell in pieces, or to place a limit sell order on QX at your price and let buyers come to you.
+        Use <code>side=buy</code> to price a purchase.
+      </p>
+
+      <h2>Can I look at a Qubic wallet's portfolio without connecting it?</h2>
+      <p>
+        Yes. Some people will not connect a wallet to a site they have only just found, and everything a portfolio shows is public on the network. QMax's portfolio screens (My assets, Orders, History and
+        Pools) accept <strong>any Qubic address</strong> and show its holdings, what they would fetch if sold now, open orders, trade history and pool positions, read-only. Nothing is signed and no wallet is connected.
+      </p>
+
+      <h2>Does QMax hold my funds or keys?</h2>
+      <p>
+        QMax is <strong>non-custodial</strong>. It never holds keys or coins, and it never signs or sends a transaction for anyone: every trade is signed in your own wallet, inside limits shown to you first
+        (the least you will receive or the most you will pay). A quote is a snapshot, so QMax gets a fresh one when you review the order. Only QX and QSwap are ever involved, so check a
+        transaction's destination before you approve it. The <a href="https://github.com/profitphil/qmax">source code is public</a> to read.
+      </p>
+
+      <h2>Does QMax charge a fee?</h2>
+      <p>
+        Trading and everything on the website is free. The markets' own fees (above) still apply, and the network's own limits apply to every trade. Two things are paid for, both optional: price alerts
+        in the Discord bot, and "Max" plans for AI agents (100 QU each, paid with x402 through Q+Pay).
+      </p>
+
+      <h2>Can I trade from Discord or with an AI agent?</h2>
+      <p>
+        Yes. The QMax Discord bot quotes, charts and trades with <code>/buy</code>, <code>/sell</code>, <code>/limit</code> and <code>/orders</code>, signing in your own wallet over WalletConnect. For software,
+        QMax has an HTTP API with an OpenAPI document, an MCP server and a TypeScript SDK, all described on the <a href="/agents/">agents page</a> and in <a href="/llms.txt">llms.txt</a>.
+      </p>
+    </main>
+  </body>
+</html>

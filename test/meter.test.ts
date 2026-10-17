@@ -81,10 +81,10 @@ test("bad claim input is refused before anything is looked up", async () => {
 
 test("the rate limiter allows the limit, then waits for the window", () => {
   const l = new RateLimiter(2, 1000);
-  assert.equal(l.hit("a", 0).ok, true);
-  assert.equal(l.hit("a", 10).ok, true);
+  assert.deepEqual(l.hit("a", 0), { ok: true, limit: 2, remaining: 1, resetInSec: 1 }, "it says how many calls are left in the window");
+  assert.deepEqual(l.hit("a", 10), { ok: true, limit: 2, remaining: 0, resetInSec: 1 });
   const third = l.hit("a", 20);
-  assert.deepEqual(third, { ok: false, retryAfterSec: 1 });
+  assert.deepEqual(third, { ok: false, retryAfterSec: 1, limit: 2, remaining: 0, resetInSec: 1 });
   assert.equal(l.hit("b", 20).ok, true); // other callers are not affected
   assert.equal(l.hit("a", 1001).ok, true);
 });

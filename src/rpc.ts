@@ -177,5 +177,7 @@ export function structReader(bytes: Uint8Array) {
     length: bytes.length,
     u32: (off: number) => view.getUint32(off, true),
     i64: (off: number) => Number(view.getBigInt64(off, true)),
+    /** A copy of `len` bytes from `off` (a 32-byte key, say). */
+    bytes: (off: number, len: number) => bytes.slice(off, off + len),
   };
 }

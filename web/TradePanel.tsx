@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { fetchArbitrage, fetchBook, fetchQuote, livePrice, lookupAssetById, shownName } from "./client.ts";
+import { fetchArbitrage, fetchBook, fetchQuote, livePrice, lookupAssetById, quoteUrl, shownName } from "./client.ts";
 import type { ArbitrageResult, AssetItem, QuoteResponse } from "./client.ts";
 import { useSettings } from "./settings.tsx";
 import { arbFiltersOf } from "../src/settings.ts";
@@ -8,6 +8,7 @@ import { PAYWALL } from "../src/config.ts";
 import { usePass } from "./exec/pass.ts";
 import { PassModal } from "./PassModal.tsx";
 import { MarketPanel } from "./MarketPanel.tsx";
+import type { MarketTab } from "./MarketPanel.tsx";
 import { compactPrice, formatPrice, spreadOf } from "./AssetList.tsx";
 import { fetchBalance, fetchHoldings } from "./exec/chain.ts";
 import { assessLimitReadiness, assessReadiness } from "../src/readiness.ts";
@@ -27,6 +28,7 @@ import { TradesDock } from "./TradesDock.tsx";
 import { presetLabel, presetsFor } from "../src/amounts.ts";
 import { MaxModal } from "./MaxModal.tsx";
 import { useMaxMode } from "./maxmode.tsx";
+import { showMaxButton } from "./maxon.ts";
 import { SavingsLine } from "./savings.tsx";
 import { HealthPanel } from "./HealthPanel.tsx";
 import { HealthBadge } from "./HealthBadge.tsx";
@@ -68,6 +70,9 @@ interface Props {
   onSwitch?: (asset: AssetItem, side: "buy" | "sell") => void;
   /** Go to Qubic's own chart (offered in the switcher beside the symbol, as the entry before the first asset). */
   onQubic?: () => void;
+  /** Which tab of the market panel is showing, when the page holds it (a phone's order book button switches it from outside); with `onMarketTab`. */
+  marketTab?: MarketTab;
+  onMarketTab?: (t: MarketTab) => void;
 }
 
 /** Whether the chart was left in wide mode: kept from one asset to the next, so switching does not undo it. */
@@ -122,7 +127,7 @@ function QuoteStrip({ asset: picked }: { asset: AssetItem }) {
   );
 }
 
-export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, onClose, onConnect, docked, onRefresh, onSwitch, onQubic }: Props) {
+export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, onClose, onConnect, docked, onRefresh, onSwitch, onQubic, marketTab, onMarketTab }: Props) {
   const { connected, wallet } = useQubicConnect();
   /** From tablet width up the order ticket is a slim bar under the chart (the chart gets the room); on a phone it stays a block above it. */
   const bar = useMedia("(min-width: 901px)") || !!docked;
@@ -337,10 +342,10 @@ export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, 
       </button>
     );
 
-  // In Max mode the QMax search is the main button, and the ordinary order is still there under it.
+  // In Max mode the QMax search is the main button, and the ordinary order is still there under it. Not for a limit order: that has a price of its own, which Max would not use.
   const maxReady = side === "sell" ? held !== null && held > 0 : balance !== null && balance > 0;
   const ctas =
-    max.active && connected ? (
+    showMaxButton(max.active, connected, isLimit) ? (
       <div className="cta-stack">
         <button type="button" className="go max-go" disabled={!maxReady} onClick={() => setMaxOpen(true)} title="QMax searches for the best position for this trade: the best way to execute, the best size, an arbitrage, the best exit">
           {validQty ? `Max: best ${side} of ${n(qty, 0)} ${shownName(asset)}` : `Max: best position to ${side} ${shownName(asset)}`}
@@ -442,7 +447,7 @@ export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, 
 
       <div className="trade-body">
         <section className="pane market-pane" aria-label={`${shownName(asset)} market`}>
-          <MarketPanel key={asset.id} assetId={asset.id} symbol={shownName(asset)} venues={asset.venues} defaultTab="chart" focus={{ on: chartFocus, toggle: () => setChartFocus((v) => !v) }} />
+          <MarketPanel key={asset.id} assetId={asset.id} symbol={shownName(asset)} venues={asset.venues} defaultTab="chart" tab={marketTab} onTab={onMarketTab} focus={{ on: chartFocus, toggle: () => setChartFocus((v) => !v) }} />
           <p className="venue-note">
             <Icon name="info" size={15} />
             <span>
@@ -453,7 +458,7 @@ export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, 
           </p>
           {comparison && !max.active && (
             <p className="infoline compare-locked">
-              <span>Which market is cheaper to buy and to sell, by how much, and whether an arbitrage is open between the two markets, are part of Max. <button type="button" className="linklike" onClick={() => max.setOn(true)}>Turn on Max</button> to see them.</span>
+              <span>Which market is cheaper to buy and to sell, by how much, and whether an arbitrage is open between the two markets, are part of Max, which is switched off in your Settings.</span>
             </p>
           )}
           {comparison && max.active && (
@@ -638,6 +643,11 @@ export function TradePanel({ asset, initialSide, initialQty, avgCostQu, refTag, 
                 )}
                 <SavingsLine quote={quote} />
                 {quote.warnings.filter((w) => !(noLiquidity && w.startsWith("No market"))).map((w) => <p key={w} className="warn inline"><Icon name="alert" size={15} /> {w}</p>)}
+                {quote.route.length > 0 && (
+                  <a className="quote-api" href={quoteUrl({ side: quote.side, asset: asset.id, qty, slippageBps })} target="_blank" rel="noreferrer" title="This quote as JSON, with the answer in words: free, no key. For scripts and AI agents.">
+                    This quote as JSON <small>(free API, for scripts and AI agents)</small>
+                  </a>
+                )}
                 {!quote.executable && <p className="note">This server is showing demo data, so trading is disabled.</p>}
               </div>
             )}

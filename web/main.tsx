@@ -6,6 +6,7 @@ import { App } from "./App.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { SettingsProvider } from "./settings.tsx";
 import { MaxModeProvider } from "./maxmode.tsx";
+import { ViewingProvider } from "./viewing.tsx";
 import { useTheme } from "./theme.ts";
 import { startUsageReporting } from "./usage.ts";
 import "./style.css";
@@ -26,9 +27,11 @@ createRoot(document.getElementById("root")!).render(
     <QubicConnectProvider>
       <SettingsProvider>
         <MaxModeProvider>
-          <ErrorBoundary>
-            <App />
-          </ErrorBoundary>
+          <ViewingProvider>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+          </ViewingProvider>
         </MaxModeProvider>
         <ThemedToaster />
       </SettingsProvider>

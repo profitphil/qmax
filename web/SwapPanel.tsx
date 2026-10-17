@@ -232,7 +232,7 @@ export function SwapPanel({ assets, owned, walletId, onConnect, onChanged, onBuy
           <span><b>QSwap:</b> Qubic &#8644; Token</span>
           <span>
             <b>Max swap:</b> Asset &#8644; Asset{" "}
-            {!maxMode && <button type="button" className="linklike" onClick={() => max.setOn(true)}>Turn on Max</button>}
+            {!maxMode && <span className="muted">(off: switch it on in Settings)</span>}
           </span>
         </p>
       </header>

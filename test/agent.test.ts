@@ -14,7 +14,7 @@ import { Meter } from "../src/meter.ts";
 import { QMaxClient, QMaxError } from "../sdk/index.ts";
 import { X402Error, createX402Fetch } from "../sdk/x402.ts";
 import type { Payer } from "../sdk/x402.ts";
-import { TradeRefused, agentTrade, checkPlan, contractPayer, nonceFromHex, seedSigner, worstCasePrice } from "../sdk/agent.ts";
+import { TradeRefused, agentPlan, agentTrade, checkPlan, contractPayer, nonceFromHex, seedSigner, worstCasePrice } from "../sdk/agent.ts";
 import type { StepChain } from "../sdk/agent.ts";
 import { QPAYHUB_IDENTITY, SESSION_RESOURCE_ID, UsedLedger, X402Gate, resourceTag } from "../src/x402.ts";
 import { SELLER, fakeNetwork, randomTxId } from "./x402-helpers.ts";
@@ -318,6 +318,24 @@ test("a trade outside the limits signs nothing at all", async () => {
   assert.deepEqual(rig.states, []);
 });
 
+test("a dry run says what would be signed, with the same checks, and never signs or sends", async () => {
+  const q = buyQuote();
+  const refusing = { ...signer, sign: async () => { throw new Error("a dry run must not sign"); } };
+  const env = { snapshot: async () => ({ balanceQu: 1_000_000, holdings: {} }), openOrders: async () => [], sleep: async () => {} };
+  const base = { client: { quote: async () => q }, signer: refusing as never, side: "buy" as const, asset: "CFB", qty: q.qty, env };
+  const plan = await agentPlan({ ...base, limits: { maxOutlayQu: 2_000, maxAveragePriceQu: 105 } });
+  assert.equal(plan.dryRun, true);
+  assert.deepEqual(plan.steps.map((s) => s.kind), ["qx-bid"]);
+  assert.equal(plan.steps[0].amountQu, 1010);
+  assert.equal(plan.maxOutlayQu, 1010);
+  assert.equal(plan.balanceQu, 1_000_000);
+  assert.equal(plan.quote.asset, "CFB");
+  // the limits are enforced exactly as for a real trade, and so is the check that the wallet can pay
+  await assert.rejects(agentPlan({ ...base, limits: { maxOutlayQu: 500 } }), (e: unknown) => e instanceof TradeRefused && /over the limit/.test(e.message));
+  await assert.rejects(agentPlan({ ...base, limits: {} as never }), /maxOutlayQu is required/);
+  await assert.rejects(agentPlan({ ...base, limits: { maxOutlayQu: 2_000 }, env: { ...env, snapshot: async () => ({ balanceQu: 100, holdings: {} }) } }), /Not enough QU/);
+});
+
 test("a hostile sale quote is refused before the seed is used", async () => {
   const rig = tradeRig(sellQuote(1));
   rig.holdings[13] = 10;
@@ -329,4 +347,50 @@ test("an order that cannot be filled or paid for stops before signing", async ()
   const unfillable = tradeRig(quoteOf("buy", [leg("QX", { type: "qx-bid", qty: 10, limitPrice: 101 })], { fillable: false, filledQty: 4 }));
   await assert.rejects(unfillable.run({ maxOutlayQu: 2_000 }), /Only 4 of 10/);
   assert.equal(unfillable.sent.length, 0);
+});
+
+test("an agent's orders go through QMax as agent orders by default, and straight to the network when it says so", async () => {
+  const { agentChain } = await import("../sdk/agent.ts");
+  const { liveChain } = await import("../web/exec/run.ts");
+  const { QMaxClient } = await import("../sdk/client.ts");
+  const { identityToBytes } = await import("../src/identity.ts");
+  const { QX_ID } = await import("../src/ledger.ts");
+  const wallet = "A".repeat(59) + "B";
+  const input = new Uint8Array(56).fill(3);
+  const tx = new Uint8Array(80 + input.length + 64);
+  const view = new DataView(tx.buffer);
+  tx.set(identityToBytes(wallet), 0);
+  tx.set(identityToBytes(QX_ID), 32);
+  view.setUint16(76, 6, true);
+  view.setUint16(78, input.length, true);
+  tx.set(input, 80);
+  tx.set(new Uint8Array(64).fill(5), 80 + input.length);
+
+  const real = globalThis.fetch;
+  const urls: string[] = [];
+  const bodies: any[] = [];
+  globalThis.fetch = (async (url: string, init: { body: string }) => {
+    urls.push(String(url));
+    bodies.push(JSON.parse(init.body));
+    return { ok: true, status: 200, text: async () => "", json: async () => ({ transactionId: "q".repeat(60) }) };
+  }) as unknown as typeof fetch;
+  try {
+    const client = new QMaxClient({ baseUrl: "https://qmax.test/api/" });
+    assert.equal(client.baseUrl, "https://qmax.test/api");
+    assert.equal(await agentChain({ client }).broadcast(tx, wallet), "q".repeat(60));
+    assert.deepEqual(urls, ["https://qmax.test/api/v1/broadcast"]);
+    assert.equal(bodies[0].channel, "agent");
+    assert.equal(bodies[0].wallet, wallet);
+    urls.length = 0;
+    await agentChain({ client, reportTo: false }).broadcast(tx, wallet);
+    assert.ok(urls.every((u) => u.includes("/v1/broadcast-transaction")), "reportTo: false tells QMax nothing");
+    urls.length = 0;
+    await agentChain({ client, reportTo: "https://other.test" }).broadcast(tx, wallet);
+    assert.equal(urls[0], "https://other.test/v1/broadcast");
+    assert.equal(agentChain({ client: {} as never }), liveChain, "a client with no known address: straight to the network");
+    const mine = { ...liveChain };
+    assert.equal(agentChain({ client, chain: mine }), mine, "the caller's own chain is used as it is");
+  } finally {
+    globalThis.fetch = real;
+  }
 });

@@ -15,6 +15,7 @@ import { SwapModal } from "./SwapModal.tsx";
 import { SwapPanel } from "./SwapPanel.tsx";
 import { useHealthAll } from "./health-api.ts";
 import { usePortfolio } from "./portfolio-api.ts";
+import { ViewWalletForm, ViewingBanner } from "./ViewWallet.tsx";
 import { MyAssetsSummary } from "./MyAssetsSummary.tsx";
 import { useQuPrice } from "./qu-api.ts";
 import { compactQu, shortDate, signedPct, signedQu } from "./format.ts";
@@ -86,6 +87,8 @@ interface Props {
   onConnect: () => void;
   /** Connected wallet's identity, if any. */
   walletId: string | null;
+  /** The wallet shown is one being looked at (pasted in, not connected): nothing on this list may be signed, so its actions are left out. */
+  readOnly?: boolean;
   /** Change this to re-read the wallet (e.g. after a trade). */
   refreshKey: number;
   /** Told what the list holds, for the numbers at the top of the page. */
@@ -105,7 +108,7 @@ function SortHead({ id, label, title, sort, dir, onSort, left }: { id: SortKey; 
   );
 }
 
-export function AssetList({ mode = "list", show, page, selectedId, onDefault, onTrade, onConnect, walletId, refreshKey, onStats, onChanged }: Props) {
+export function AssetList({ mode = "list", show, page, selectedId, onDefault, onTrade, onConnect, walletId, readOnly = false, refreshKey, onStats, onChanged }: Props) {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -371,6 +374,7 @@ export function AssetList({ mode = "list", show, page, selectedId, onDefault, on
   return (
     <section className={mode === "list" ? "markets" : `markets ${mode}`} aria-label={mode === "page" ? PAGE_TITLES[tab as ListPage] : "Markets"}>
       {!watch && tabsEl}
+      {readOnly && !watch && PORTFOLIO_TABS.includes(tab) && !searchingAll && <ViewingBanner />}
       {mode !== "page" && (show !== "portfolio" || tab === "mine") && <div className="browse-head">
         <div className="toolbar">
           <label className="searchbox">
@@ -408,7 +412,7 @@ export function AssetList({ mode = "list", show, page, selectedId, onDefault, on
       {mode !== "page" && (!watch || searchingAll || (tab === "mine" && walletId)) && (
         <div className="listbar">
           <p className={searchingAll ? "note" : "note hint"}>{searchingAll ? `Results for “${query.trim()}” across all assets` : tab === "swap" || watch ? "" : HINTS[tab]}</p>
-          {tab === "mine" && walletId && !searchingAll && (
+          {tab === "mine" && walletId && !searchingAll && !readOnly && (
             <button className="link" onClick={() => setConsolidating(true)} title="Move every share in your wallet under QX (or QSwap) management">Keep all under one contract</button>
           )}
         </div>
@@ -449,18 +453,25 @@ export function AssetList({ mode = "list", show, page, selectedId, onDefault, on
         </div>
       )}
 
-      {tab === "swap" && !searchingAll && (
+      {tab === "swap" && !searchingAll && !readOnly && (
         <SwapPanel assets={assets} owned={owned} walletId={walletId} onConnect={onConnect} onChanged={onChanged} onBuy={(a) => onTrade(a, "buy")} />
+      )}
+      {tab === "swap" && !searchingAll && readOnly && (
+        <div className="empty">
+          <span className="empty-icon"><Icon name="swap" size={22} /></span>
+          <p>Swapping uses your own wallet, and you are only looking at this one. Connect a wallet to swap.</p>
+          <button className="primary" onClick={onConnect}>Connect wallet</button>
+        </div>
       )}
 
       {tab === "history" && !searchingAll && <LedgerPanel walletId={walletId} assets={assets} onConnect={onConnect} />}
 
       {tab === "pools" && !searchingAll && (
-        <PoolsPanel assets={assets} walletId={walletId} onConnect={onConnect} onChanged={onChanged} onSelectAsset={(id) => { const a = assets.find((x) => x.id === id); if (a) onTrade(a, "buy"); }} />
+        <PoolsPanel assets={assets} walletId={walletId} readOnly={readOnly} onConnect={onConnect} onChanged={onChanged} onSelectAsset={(id) => { const a = assets.find((x) => x.id === id); if (a) onTrade(a, "buy"); }} />
       )}
 
       {tab === "orders" && !searchingAll && (
-        <OrdersPanel walletId={walletId} assets={assets} refreshKey={refreshKey} onConnect={onConnect} onCount={setOrderCount} onChanged={() => setOrderCount((c) => c)} />
+        <OrdersPanel walletId={walletId} assets={assets} readOnly={readOnly} refreshKey={refreshKey} onConnect={onConnect} onCount={setOrderCount} onChanged={() => setOrderCount((c) => c)} />
       )}
 
       {tab === "mine" && !searchingAll && walletId && <MyAssetsSummary pf={portfolio} qu={qu} compact={watch} />}
@@ -674,9 +685,15 @@ export function AssetList({ mode = "list", show, page, selectedId, onDefault, on
                 </div>
 
                 <div className="cell actions">
-                  <button className="tbtn buy" aria-label={`Buy ${shownName(a)}`} title={`Buy ${shownName(a)}`} onClick={() => onTrade(a, "buy", undefined, pf?.avgCost ?? null)}>Buy</button>
-                  <button className="tbtn sell" aria-label={`Sell ${shownName(a)}`} title={`Sell ${shownName(a)}`} onClick={() => onTrade(a, "sell", undefined, pf?.avgCost ?? null)}>Sell</button>
-                  {max.active && tab === "mine" && !searchingAll && held > 0 && (
+                  {readOnly ? (
+                    <button className="tbtn" aria-label={`Open ${shownName(a)}`} title={`Open ${shownName(a)}: its chart and order panel`} onClick={() => onTrade(a, "buy")}>Open</button>
+                  ) : (
+                    <>
+                      <button className="tbtn buy" aria-label={`Buy ${shownName(a)}`} title={`Buy ${shownName(a)}`} onClick={() => onTrade(a, "buy", undefined, pf?.avgCost ?? null)}>Buy</button>
+                      <button className="tbtn sell" aria-label={`Sell ${shownName(a)}`} title={`Sell ${shownName(a)}`} onClick={() => onTrade(a, "sell", undefined, pf?.avgCost ?? null)}>Sell</button>
+                    </>
+                  )}
+                  {max.active && tab === "mine" && !searchingAll && held > 0 && !readOnly && (
                     <button className="tbtn swap" aria-label={`Max swap: ${shownName(a)} for another asset`} title={`Max swap: ${shownName(a)} for another asset, sold and bought at the best routes in one review${proTitle(max.access)}`} onClick={() => setSwapFrom(a)}>
                       <Icon name="swap" size={13} /> Swap
                     </button>
@@ -723,11 +740,12 @@ export function AssetList({ mode = "list", show, page, selectedId, onDefault, on
               <span className="empty-icon"><Icon name="wallet" size={22} /></span>
               <p>Connect your wallet to see the assets you hold.</p>
               <button className="primary" onClick={onConnect}>Connect wallet</button>
+              {show === "portfolio" || mode === "page" ? <ViewWalletForm /> : null}
             </>
           ) : tab === "mine" ? (
             <>
               <span className="empty-icon"><Icon name="inbox" size={22} /></span>
-              <p>You don’t hold any tradable assets yet. Press <b>Buy</b> on any asset to start.</p>
+              <p>{readOnly ? "This wallet does not hold any tradable assets." : <>You don’t hold any tradable assets yet. Press <b>Buy</b> on any asset to start.</>}</p>
             </>
           ) : tab === "favs" ? (
             <>

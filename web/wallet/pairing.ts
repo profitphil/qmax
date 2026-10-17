@@ -106,3 +106,47 @@ export function inAppBrowser(userAgent: string): boolean {
   if (/; wv\)/.test(userAgent)) return true;
   return /iPhone|iPad|iPod/.test(userAgent) && !/Safari\//.test(userAgent);
 }
+
+/**
+ * The accounts a wallet listed in a WalletConnect session when it approved (each entry is "qubic:mainnet:ADDRESS"), without asking it anything. A phone's wallet app is asleep
+ * once the person is back on the page, so a request for its accounts goes unanswered until they open it again; the session already carries the list. Only real addresses, once
+ * each, at most 25.
+ */
+export function accountsFromNamespaces(namespaces: Record<string, { accounts?: string[] } | undefined> | undefined): string[] {
+  const listed = namespaces?.qubic?.accounts ?? [];
+  const out: string[] = [];
+  for (const entry of listed) {
+    const address = String(entry).split(":").pop() ?? "";
+    if (/^[A-Z]{60}$/.test(address) && !out.includes(address)) out.push(address);
+    if (out.length >= 25) break;
+  }
+  return out;
+}
+
+/**
+ * What the connect dialog does once the wallet app is linked and the person has to choose an account: use the accounts the session lists at once ("session": the wallet app may be
+ * asleep and would not answer a request for them), or ask the wallet for them, showing a waiting screen only if the dialog is part way through connecting ("ask-and-wait") and
+ * otherwise leaving the other ways to connect where they are ("ask-quietly").
+ */
+export function accountPlan(fromSession: readonly string[], midway: boolean): "session" | "ask-and-wait" | "ask-quietly" {
+  if (fromSession.length) return "session";
+  return midway ? "ask-and-wait" : "ask-quietly";
+}
+
+/**
+ * Whatever a wallet sends back for its accounts is shown to the person and used as an address in requests: only real addresses (60 capital letters), once each, with a plain short
+ * name, get through, and an entry that is not one is dropped rather than allowed to break the page. A wallet may name the address field differently, so the likely names are read.
+ */
+export function cleanWalletAccounts(res: unknown, limit = 25): { address: string; name: string }[] {
+  if (!Array.isArray(res)) return [];
+  const out: { address: string; name: string }[] = [];
+  for (const entry of res) {
+    const a = entry as Record<string, unknown> | null;
+    const address = [a?.address, a?.publicId, a?.identity, a?.publicKey].find((v): v is string => typeof v === "string" && /^[A-Z]{60}$/.test(v));
+    if (!address || out.some((x) => x.address === address)) continue;
+    const raw = typeof a?.name === "string" ? a.name : typeof a?.alias === "string" ? a.alias : "";
+    out.push({ address, name: raw.replace(/[^\p{L}\p{N} ._-]/gu, "").slice(0, 32) });
+    if (out.length >= limit) break;
+  }
+  return out;
+}

@@ -13,6 +13,9 @@ import { parseArbQuery } from "./arbfilters.ts";
 import type { Meter } from "./meter.ts";
 import type { RefLog } from "./refs.ts";
 import type { UsageLog } from "./usage.ts";
+import type { Relay } from "./relay.ts";
+import type { McpHandler } from "./mcphost.ts";
+import type { ListedAsset, PageHandler } from "./tokenpages.ts";
 import { RateLimiter } from "./ratelimit.ts";
 import { openapi } from "./openapi.ts";
 import { Raw, RouteError, plainNumber } from "./routes.ts";
@@ -55,6 +58,12 @@ export interface ApiOptions {
   refs?: RefLog;
   /** Counts who trades through QMax, checked on-chain. Without it /v1/trade-report and /v1/stats are not served. */
   usage?: UsageLog;
+  /** Carries signed orders to the network and notes them for counting (POST /v1/broadcast). Without it that endpoint is not served and senders use the network directly. */
+  relay?: Relay;
+  /** Pages served as HTML (the token pages and their sitemap), rendered from the same asset list as /v1/assets. Without it those paths are not served. */
+  pages?: PageHandler;
+  /** QMax's MCP server over HTTP (POST /mcp, which nginx serves at /api/mcp). Without it that endpoint is not served. */
+  mcp?: McpHandler;
   /** Prices recorded over time. Without it /v1/history is not served. */
   history?: HistoryStore;
   /** Candles of past trades. Without it /v1/candles is not served. */
@@ -72,6 +81,21 @@ export interface ApiOptions {
   trustProxy?: boolean | number;
   /** Most sockets open at once (default 1024), so a flood of slow or parked requests cannot exhaust file descriptors. */
   maxConnections?: number;
+}
+
+/** A short, steady name for what went wrong, beside the sentence, so a program can act on it without reading the words (which may change). */
+function errorCode(status: number): string {
+  switch (status) {
+    case 400: return "bad_request";
+    case 401: return "unauthorized";
+    case 402: return "payment_required";
+    case 404: return "not_found";
+    case 413: return "payload_too_large";
+    case 429: return "rate_limited";
+    case 502: return "upstream_error";
+    case 503: return "unavailable";
+    default: return status >= 500 ? "server_error" : "error";
+  }
 }
 
 class HttpError extends Error {
@@ -196,8 +220,8 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
     "content-type": "application/json",
     "access-control-allow-origin": "*",
-    "access-control-allow-headers": "content-type,x-api-key,x-payment,x-access-grant",
-    "access-control-expose-headers": "x-qmax-balance-qu,x-qmax-charged-qu,retry-after,x-payment-response,x-access-grant,x-access-grant-expires,x-access-grant-status",
+    "access-control-allow-headers": "content-type,x-api-key,x-payment,x-access-grant,mcp-protocol-version,mcp-session-id,last-event-id",
+    "access-control-expose-headers": "mcp-session-id,x-qmax-balance-qu,x-qmax-charged-qu,x-ratelimit-limit,x-ratelimit-remaining,x-ratelimit-reset,retry-after,x-payment-response,x-access-grant,x-access-grant-expires,x-access-grant-status",
     "access-control-allow-methods": "GET,POST,OPTIONS",
   });
   res.end(text);
@@ -226,6 +250,11 @@ export function createApi(opts: ApiOptions): Server {
   const claims = new RateLimiter(30, 60_000);
   const refReports = new RateLimiter(60, 60_000);
   const tradeReports = new RateLimiter(60, 60_000);
+  const broadcasts = new RateLimiter(30, 60_000);
+  // MCP: the calls an assistant makes to list and use the tools. What the tools fetch is limited again, by the same per-address limits as any API call.
+  const mcpCalls = new RateLimiter(120, 60_000);
+  // The token pages: generous for a crawler walking all of them, short of letting one address hammer the renderer.
+  const pageViews = new RateLimiter(120, 60_000);
   // Even paying callers are capped, because single-venue quotes cost nothing and still use the node.
   const keyed = new RateLimiter((opts.freePerMin ?? 60) * 10, 60_000);
   const hops = opts.trustProxy === true ? 1 : opts.trustProxy || 0;
@@ -235,8 +264,14 @@ export function createApi(opts: ApiOptions): Server {
     const fromProxy = chain.length >= hops ? chain[chain.length - hops] : "";
     return subnet(fromProxy || req.socket.remoteAddress || "unknown");
   };
-  const limit = (l: RateLimiter, req: IncomingMessage, what: string) => {
+  const limit = (l: RateLimiter, req: IncomingMessage, what: string, res?: ServerResponse) => {
     const r = l.hit(ipOf(req));
+    // Where the caller is told its allowance, so a bot can slow down before it is refused.
+    if (res) {
+      res.setHeader("x-ratelimit-limit", String(r.limit));
+      res.setHeader("x-ratelimit-remaining", String(r.remaining));
+      res.setHeader("x-ratelimit-reset", String(r.resetInSec));
+    }
     if (!r.ok) throw new HttpError(429, `Too many ${what}. Try again in ${r.retryAfterSec}s.`, { retryAfterSec: r.retryAfterSec });
   };
   const headerKey = (req: IncomingMessage) => String(req.headers["x-api-key"] ?? "");
@@ -335,6 +370,53 @@ export function createApi(opts: ApiOptions): Server {
         }
       }
 
+      // A HEAD request (what crawlers and link checkers send) asks for the same answer without the body, which Node leaves off by itself.
+      if (opts.pages && (req.method === "GET" || req.method === "HEAD") && (url.pathname === "/token" || url.pathname.startsWith("/token/") || url.pathname === "/sitemap-tokens.xml")) {
+        if (!ownKey(req)) limit(pageViews, req, "page requests", res);
+        // The asset list as /v1/assets serves it: each asset with its price drawn from QX and its volumes.
+        const listing = () => {
+          const r = opts.data.listAssets?.({});
+          if (!r) return { ready: true, assets: [] as ListedAsset[] };
+          const volumes = opts.trades?.volumes?.();
+          const lasts = opts.trades?.lasts?.();
+          const none = { volume24hQu: 0, volume72hQu: 0, volume7dQu: 0, trades24h: 0, change24hPct: null, change72hPct: null, change7dPct: null };
+          return { ready: r.ready, assets: r.assets.map((a) => ({ ...priceFromQx(a, lasts?.get(a.id.toUpperCase())), ...(volumes ? (volumes.get(a.id.toUpperCase()) ?? none) : {}) })) as unknown as ListedAsset[] };
+        };
+        const page = await opts.pages(url.pathname, { listing });
+        if (page) {
+          res.writeHead(page.status, {
+            "content-type": page.type,
+            "cache-control": page.cacheSeconds ? `public, max-age=${page.cacheSeconds}` : "no-store",
+            // plain HTML with its own style and nothing else: no script, no outside request
+            "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            ...(page.location ? { location: page.location } : {}),
+            ...(page.retryAfterSec ? { "retry-after": String(page.retryAfterSec) } : {}),
+          });
+          return void res.end(page.body);
+        }
+      }
+
+      if (opts.mcp && url.pathname === "/mcp") {
+        const cors = { "access-control-allow-origin": "*", "access-control-expose-headers": "mcp-session-id" };
+        if (req.method !== "POST") {
+          // Stateless: there is no stream to open or session to end, which is what 405 says to a client that asks.
+          res.writeHead(405, { ...cors, allow: "POST, OPTIONS", "content-type": "application/json" });
+          return void res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed: this MCP server is stateless, send POST." }, id: null }));
+        }
+        limit(mcpCalls, req, "MCP requests", res);
+        const body = await readBody(req);
+        for (const [k, v] of Object.entries(cors)) res.setHeader(k, v);
+        return void (await opts.mcp(req, res, body, ipOf(req)));
+      }
+
+      if (opts.relay && url.pathname === "/v1/broadcast" && req.method === "POST") {
+        // QMax's own key (the bot) is not limited; everyone else is, per address, so this cannot be used to hammer the node.
+        if (!ownKey(req)) limit(broadcasts, req, "broadcasts");
+        const r = await opts.relay.send(await readBody(req), ipOf(req));
+        if (r.status !== 200) throw new HttpError(r.status, String(r.body.error ?? "Not sent"));
+        return send(res, 200, r.body);
+      }
+
       if (opts.usage) {
         if (url.pathname === "/v1/trade-report" && req.method === "POST") {
           limit(tradeReports, req, "reports");
@@ -423,11 +505,11 @@ export function createApi(opts: ApiOptions): Server {
         } else if (key) {
           const found = meter.find(key);
           if (!found) throw new HttpError(401, "Invalid or missing x-api-key");
-          if (LIMITED.has(url.pathname)) limit(keyed, req, "requests");
+          if (LIMITED.has(url.pathname)) limit(keyed, req, "requests", res);
           caller = { keyId: found.keyId, balanceQu: found.account.balanceQu };
         } else if (LIMITED.has(url.pathname)) {
           try {
-            limit(freeCalls, req, "requests without a key");
+            limit(freeCalls, req, "requests without a key", res);
           } catch (e) {
             if (e instanceof HttpError && e.status === 429) {
               // Where an agent can pay, the answer is a 402 it knows how to act on; otherwise the plain limit message.
@@ -466,13 +548,13 @@ export function createApi(opts: ApiOptions): Server {
       if (!billing) {
         if (opts.freeAccess) {
           // Free for everyone. Only QMax's own key (and a paid Max caller) skips the per-IP limit; any other key is simply ignored.
-          if (LIMITED.has(url.pathname) && !ownKey(req) && !maxPaid) limit(freeCalls, req, "requests");
+          if (LIMITED.has(url.pathname) && !ownKey(req) && !maxPaid) limit(freeCalls, req, "requests", res);
         } else if ((opts.apiKey || opts.adminKey) && !ownKey(req)) {
           throw new HttpError(401, "Invalid or missing x-api-key");
         }
       }
 
-      const route = routes.get(`${req.method} ${url.pathname}`);
+      const route = routes.get(`${req.method === "HEAD" ? "GET" : req.method} ${url.pathname}`);
       if (route) {
         if (route.keyed) requireAdminKey(req, "Only QMax's admin key can use this endpoint (set ADMIN_KEY, or API_KEY if there is no separate admin key, and send it as x-api-key)");
         const own = routeLimits.get(route.path);
@@ -642,10 +724,10 @@ export function createApi(opts: ApiOptions): Server {
       const e = err instanceof RouteError ? new HttpError(err.status, err.message, err.extra) : err;
       if (e instanceof HttpError) {
         if (e.extra.retryAfterSec !== undefined || e.status === 429) res.setHeader("retry-after", String(e.extra.retryAfterSec ?? 60));
-        return send(res, e.status, { error: e.message, ...e.extra });
+        return send(res, e.status, { error: e.message, code: errorCode(e.status), ...e.extra });
       }
       console.error(e);
-      send(res, 500, { error: "Internal error" });
+      send(res, 500, { error: "Internal error", code: "internal_error" });
     }
   });
   // Slow, parked or flooding connections: bounded in number and in how long they may idle or take to send a request.

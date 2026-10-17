@@ -14,7 +14,7 @@ import { executeTrade, prepareTrade } from "../src/trade.ts";
 import type { TradeEnv, TradeResult } from "../src/trade.ts";
 import { QPAYHUB_IDENTITY, resourceTag } from "../src/x402.ts";
 import { PAYWALL } from "../src/config.ts";
-import { fetchFees, fetchOpenOrders, fetchSnapshot } from "../web/exec/chain.ts";
+import { broadcastVia, fetchFees, fetchOpenOrders, fetchSnapshot } from "../web/exec/chain.ts";
 import { INSTANT_SIGNER_TICK_OFFSET, liveChain, runSteps } from "../web/exec/run.ts";
 import type { StepChain, StepState } from "../web/exec/run.ts";
 import type { QMaxClient } from "./client.ts";
@@ -220,9 +220,70 @@ export interface AgentTradeOptions {
   onState?: (stepId: string, state: { status: string; error?: string; txId?: string }) => void;
   /** Replace how the network is read and written (tests, or another RPC). */
   chain?: StepChain;
+  /**
+   * Where QMax is, so each order is sent to the network through QMax (which notes its transaction id and your wallet address, both public on the Qubic network, and counts it as an
+   * agent order) instead of directly. By default it is the address the `client` uses; pass `false` to send straight to the network and tell QMax nothing. If QMax cannot take an order it
+   * goes to the network directly, so this can never stop a trade. Ignored when you give your own `chain`.
+   */
+  reportTo?: string | false;
   env?: Partial<TradeEnv>;
   /** Share one of these between every trade an agent makes, to cap what all of them together may spend. */
   budget?: TradeBudget;
+}
+
+/** The environment, quote and plan of a trade, checked against its limits: everything short of signing. Shared by `agentTrade` and `agentPlan`, so a dry run can never check less than the real thing. */
+async function prepareAgentTrade(o: AgentTradeOptions) {
+  const chain = agentChain(o);
+  const env: TradeEnv = {
+    quote: (req) => o.client.quote(req),
+    snapshot: fetchSnapshot,
+    fees: fetchFees,
+    openOrders: fetchOpenOrders,
+    run: (wallet, steps, sign, onState) => runSteps(wallet, steps, sign as never, onState, undefined, chain, undefined, INSTANT_SIGNER_TICK_OFFSET),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    ...o.env,
+  };
+  const prepared = await prepareTrade(env, { side: o.side, asset: o.asset, qty: o.qty, slippageBps: o.slippageBps ?? 100, split: o.split, issuer: o.issuer }, o.signer.identity);
+  const problems = checkPlan(prepared.plan, prepared.quote, o.limits);
+  if (problems.length) throw new TradeRefused(problems);
+  return { env, prepared };
+}
+
+/** What a dry run reports: the trade `agentTrade` would make, with nothing signed or sent. */
+export interface AgentPlanPreview {
+  dryRun: true;
+  quote: QuoteResponse;
+  /** Each transaction that would be signed, in order. */
+  steps: { id: string; kind: string; description: string; amountQu: number }[];
+  /** The most QU that could leave the wallet across all the steps (some is refunded). */
+  maxOutlayQu: number;
+  /** What the wallet holds in QU now: a trade needs at least `maxOutlayQu` of it. */
+  balanceQu: number;
+  warnings: string[];
+}
+
+/**
+ * A dry run: the same quote, the same checks against your limits and the same steps as `agentTrade`, but nothing is signed and nothing is sent. It reads the wallet's public balance and
+ * holdings, so it also says whether the wallet could make the trade. Use it to try a strategy, or to see exactly what would be signed, before using real funds; then call `agentTrade`.
+ * Throws `TradeRefused` when the plan is outside the limits, as `agentTrade` would, and the same errors when the wallet cannot cover it.
+ */
+export async function agentPlan(o: Omit<AgentTradeOptions, "onState" | "budget" | "chain" | "reportTo">): Promise<AgentPlanPreview> {
+  const { prepared } = await prepareAgentTrade(o);
+  return {
+    dryRun: true,
+    quote: prepared.quote,
+    steps: prepared.plan.steps.map((s) => ({ id: s.id, kind: s.kind, description: s.description, amountQu: s.amountQu })),
+    maxOutlayQu: prepared.plan.maxOutlayQu,
+    balanceQu: prepared.balanceQu,
+    warnings: prepared.warnings ?? [],
+  };
+}
+
+/** How a trade's transactions reach the network: the caller's own chain, else through QMax as agent orders (unless `reportTo` is false or QMax's address is unknown), else directly. */
+export function agentChain(o: Pick<AgentTradeOptions, "chain" | "reportTo" | "client">): StepChain {
+  if (o.chain) return o.chain;
+  const reportTo = o.reportTo === false ? null : (o.reportTo ?? (o.client as { baseUrl?: string }).baseUrl ?? null);
+  return reportTo ? { ...liveChain, broadcast: (tx, wallet) => broadcastVia(tx, wallet, { url: reportTo, channel: "agent" }) } : liveChain;
 }
 
 /**
@@ -231,18 +292,7 @@ export interface AgentTradeOptions {
  * selling from the other venue, then one per venue), sent one at a time, stopping at the first failure.
  */
 export async function agentTrade(o: AgentTradeOptions): Promise<TradeResult & { quote: QuoteResponse }> {
-  const env: TradeEnv = {
-    quote: (req) => o.client.quote(req),
-    snapshot: fetchSnapshot,
-    fees: fetchFees,
-    openOrders: fetchOpenOrders,
-    run: (wallet, steps, sign, onState) => runSteps(wallet, steps, sign as never, onState, undefined, o.chain ?? liveChain, undefined, INSTANT_SIGNER_TICK_OFFSET),
-    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    ...o.env,
-  };
-  const prepared = await prepareTrade(env, { side: o.side, asset: o.asset, qty: o.qty, slippageBps: o.slippageBps ?? 100, split: o.split, issuer: o.issuer }, o.signer.identity);
-  const problems = checkPlan(prepared.plan, prepared.quote, o.limits);
-  if (problems.length) throw new TradeRefused(problems);
+  const { env, prepared } = await prepareAgentTrade(o);
   // No await between the budget check and holding the amount, so trades started together cannot all pass on the same money.
   o.budget?.reserve(prepared.plan.maxOutlayQu);
   const result = await executeTrade(env, prepared, o.signer.identity, (tx: never) => o.signer.sign(tx), o.onState ?? (() => {}));

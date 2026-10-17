@@ -7,10 +7,10 @@ import { MetaMaskContext } from "./MetamaskContext.tsx";
 import { useQubicConnect } from "./QubicConnectContext.tsx";
 import { useWalletConnect } from "./WalletConnectContext.tsx";
 import { EXTENSION_RELEASES_URL, connectExtension, extensionMessage, waitForExtension } from "./extension.ts";
-import { inAppBrowser } from "./pairing.ts";
+import { accountPlan, cleanWalletAccounts, inAppBrowser, withTimeout } from "./pairing.ts";
 import { Icon, Modal } from "../ui.tsx";
 
-type Mode = "none" | "metamask" | "walletconnect" | "extension" | "private-seed" | "vault-file" | "account-select";
+type Mode = "none" | "metamask" | "walletconnect" | "wc-accounts" | "extension" | "private-seed" | "vault-file" | "account-select";
 interface PickAccount {
   publicId: string;
   alias?: string;
@@ -19,7 +19,7 @@ interface PickAccount {
 export function ConnectModal({ onClose }: { onClose: () => void }) {
   const [mm] = useContext(MetaMaskContext);
   const { connect, mmSnapConnect, privateKeyConnect, vaultFileConnect } = useQubicConnect();
-  const { connect: wcConnect, isConnected: wcConnected, requestAccounts, recheck: wcRecheck } = useWalletConnect();
+  const { connect: wcConnect, isConnected: wcConnected, sessionTopic, requestAccounts, recheck: wcRecheck, sessionAccounts, adoptedAt } = useWalletConnect();
 
   const [mode, setMode] = useState<Mode>("none");
   const [seed, setSeed] = useState("");
@@ -148,17 +148,48 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
   const linkRef = useRef<HTMLInputElement>(null);
   const deepLink = `qubic-wallet://pairwc/${uri}`;
   // On a phone the button goes through QMax's own hand-off page (the one the Discord bot uses): a normal page that opens the wallet app when tapped, says what to do where an in-app
-  // browser refuses, and offers the link to copy. The link travels after the "#", which the browser never sends anywhere.
-  const handoff = `${BASE}/open#${encodeURIComponent(uri)}`;
+  // browser refuses, and offers the link to copy. The link travels after the "#", which the browser never sends anywhere. It is opened in this same tab and asked to bring the
+  // person back to QMax (?return=/) when they return from the wallet: QMax then loads, finds the connection the wallet approved, and opens the choice of account. (In a separate
+  // tab they came back to the hand-off page and stayed there.)
+  const handoff = `${BASE}/open?return=%2F#${encodeURIComponent(uri)}`;
 
+  // The wallet app is linked (it has just approved here, or the page was left linked earlier): next the person chooses which of its accounts to use. The accounts the wallet listed
+  // in the session are used at once: the wallet app is asleep once the person is back on this page, and it would not answer a request for them (it would wait with nothing to see,
+  // and used to hide every other way to connect while it did). Only when the session lists none is the wallet asked; the screen that waits for it is shown only when this dialog
+  // is part way through connecting (otherwise the ways to connect stay where they are and the answer, if it comes, takes the person to the accounts).
+  const [acctError, setAcctError] = useState("");
+  const wcAccounts = useRef(0);
+  const chooseWcAccounts = () => {
+    const mine = ++wcAccounts.current;
+    const fromSession = sessionAccounts();
+    const midway = !!adoptedAt || mode === "walletconnect" || mode === "wc-accounts";
+    const plan = accountPlan(fromSession, midway);
+    if (plan === "session") {
+      setAccounts(fromSession.map((address) => ({ publicId: address })));
+      setFromWc(true);
+      return setMode("account-select");
+    }
+    setAcctError("");
+    if (plan === "ask-and-wait") setMode("wc-accounts");
+    withTimeout(requestAccounts(), 40_000, "Your wallet did not share its accounts in time.")
+      .then((answer) => {
+        if (mine !== wcAccounts.current) return;
+        const list = cleanWalletAccounts(answer); // only real addresses get through: a malformed entry must not break the page
+        if (!list.length) throw new Error("Your wallet did not share an account.");
+        setAccounts(list.map((a) => ({ publicId: a.address, alias: a.name })));
+        setFromWc(true);
+        setMode("account-select");
+      })
+      .catch((e) => {
+        if (mine !== wcAccounts.current || !midway) return;
+        setAcctError(`${e instanceof Error ? e.message : String(e)} Open the Qubic Wallet app, approve sharing your accounts, and try again.`);
+      });
+  };
   useEffect(() => {
     if (!wcConnected) return;
-    requestAccounts().then((list) => {
-      setAccounts(list.map((a) => ({ publicId: a.address, alias: a.name })));
-      setFromWc(true);
-      setMode("account-select");
-    });
-  }, [wcConnected]);
+    chooseWcAccounts();
+    return () => void wcAccounts.current++;
+  }, [wcConnected, sessionTopic]); // a new session (the person connected again) is a new choice of account
 
   const validateSeed = (v: string) => {
     setSeed(v);
@@ -233,6 +264,22 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
           </>
         )}
 
+        {mode === "wc-accounts" && (
+          <>
+            {acctError ? (
+              <>
+                <p className="err">{acctError}</p>
+                <button onClick={chooseWcAccounts}>Try again</button>
+              </>
+            ) : (
+              <p className="note status">Connected. Getting your accounts from the wallet… If it does not answer, open the Qubic Wallet app and approve sharing them.</p>
+            )}
+            <div className="wc-col">
+              <button className="ghost" onClick={() => setMode("none")}>Back</button>
+            </div>
+          </>
+        )}
+
         {mode === "extension" && (
           <>
             {extStatus === "missing" ? (
@@ -289,7 +336,7 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
                   </>
                 )}
                 {isMobile ? (
-                  <a className={uri ? "btn" : "btn disabled"} href={uri ? handoff : undefined} target="_blank" rel="noopener noreferrer" role="button">Open in Qubic Wallet</a>
+                  <a className={uri ? "btn" : "btn disabled"} href={uri ? handoff : undefined} role="button">Open in Qubic Wallet</a>
                 ) : (
                   uri && <a className="btn" href={deepLink} role="button">Open in Qubic Wallet</a>
                 )}
@@ -362,7 +409,7 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
             <p>Select an account:</p>
             <select value={picked} onChange={(e) => setPicked(Number(e.target.value))}>
               {accounts.map((a, i) => (
-                <option key={a.publicId} value={i}>{a.alias || `Account ${i + 1}`}</option>
+                <option key={a.publicId} value={i}>{`${a.alias || `Account ${i + 1}`} · ${String(a.publicId ?? "").slice(0, 6)}…${String(a.publicId ?? "").slice(-4)}`}</option>
               ))}
             </select>
             <button
@@ -382,6 +429,7 @@ export function ConnectModal({ onClose }: { onClose: () => void }) {
             >
               Select account
             </button>
+            {fromWc && <button className="ghost" onClick={() => setMode("none")}>Use another wallet</button>}
           </>
         )}
 

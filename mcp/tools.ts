@@ -16,7 +16,7 @@ export const setFeeReader = (f: typeof feeReader) => {
  */
 
 /** The part of the SDK client the tools use, so tests can stand in for the network. */
-export type QMaxApi = Pick<QMaxClient, "assets" | "quote" | "arbitrage" | "book" | "candles" | "history" | "premium" | "pools" | "poolDetail" | "backtest" | "health" | "healthAll" | "tape" | "flow" | "swapQuote" | "ledger" | "liquidityPositions" | "liquidityPool" | "max">;
+export type QMaxApi = Pick<QMaxClient, "assets" | "quote" | "arbitrage" | "book" | "candles" | "history" | "premium" | "pools" | "poolDetail" | "backtest" | "health" | "healthAll" | "tape" | "flow" | "sellers" | "swapQuote" | "ledger" | "liquidityPositions" | "liquidityPool" | "max">;
 
 /** Replies longer than this are trimmed (the longest lists lose their oldest entries) so one call cannot fill an agent's context. */
 export const CHARACTER_LIMIT = 40_000;
@@ -150,6 +150,15 @@ Flags include thin-book, wide-spread, quiet, few-trades, new-listing, volume-spi
     input: { asset: asset.optional(), window: z.enum(["1h", "24h"]).default("24h"), venue: z.enum(["QX", "QSwap"]).optional() },
     async run(a, api) {
       return api.flow({ asset: a.asset as string | undefined, window: a.window as "24h", venue: a.venue as "QX" | undefined });
+    },
+  },
+  {
+    name: "qmax_get_sellers",
+    title: "Who has been selling an asset, and what they paid",
+    description: `For the last 7 days: the wallets that sold the asset on QX or QSwap, how long each had held the units (each unit sold is matched, first in first out, to the purchase it came from), what they paid and whether they sold above or below that, with a plain-language reading ("what the numbers say"). Read from the public Qubic archive, so the first call for an asset starts the reading and answers status "working" with its progress and what is known so far: call again in 30 to 60 seconds until status is "ready" (a reading takes a minute or two and is kept for six hours). The chain shows who sold and what they paid, not why. Free.`,
+    input: { asset },
+    async run(a, api) {
+      return api.sellers(String(a.asset));
     },
   },
   {
@@ -342,6 +351,7 @@ export function summarizeQuote(q: QuoteResponse) {
     side: q.side,
     qty: q.qty,
     fillable: q.fillable,
+    ...(q.summary ? { summary: q.summary } : {}),
     totalQu: q.totalQu,
     averagePriceQu: q.averagePriceQu,
     slippageBps: q.slippageBps,

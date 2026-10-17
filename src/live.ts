@@ -4,7 +4,7 @@ const FEE_TABLE_KEEP_MS = 5 * 60_000;
 import { fetchTransferFees } from "./fees.ts";
 import { AssetCatalog } from "./catalog.ts";
 import type { Category } from "./catalog.ts";
-import { identityToBytes, assetNameToU64 } from "./identity.ts";
+import { identityToBytes, assetNameToU64, bytesToHex } from "./identity.ts";
 import type { AssetInfo, MarketData } from "./data.ts";
 import { QSWAP_INDEX, QX_INDEX, QubicRpc, structReader, structWriter } from "./rpc.ts";
 import type { Allocation, Venue } from "./types.ts";
@@ -187,7 +187,7 @@ export class LiveMarketData implements MarketData {
         const price = out.i64(i * orderSize + 32);
         const qty = out.i64(i * orderSize + 40);
         if (qty <= 0 || price <= 0) break; // empty slots are zero-filled
-        levels.push({ price, qty });
+        levels.push({ price, qty, ownerKey: bytesToHex(out.bytes(i * orderSize, 32)) });
         count++;
       }
       if (count < PAGE) break;

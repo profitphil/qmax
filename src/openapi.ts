@@ -18,8 +18,9 @@ export const openapi = {
     "/v1/quote": {
       get: {
         summary: "Get the best route for an order",
+        description: "Prices a whole order across the QX order book and the QSwap pool and splits it where that pays more. Use side=sell to find what a holding would fetch and side=buy for what a purchase would cost: no wallet is needed, and a big order's price impact is already in the total. The `summary` field says the result in words (total, average, where each part goes, what the split is worth); `route` has each leg's exact figures and the limits to sign against.",
         parameters: quoteParams,
-        responses: { "200": { description: "Route quote" }, "400": { description: "Invalid input" }, "404": { description: "Unknown asset" } },
+        responses: { "200": { description: "Route quote, with a plain-language `summary`" }, "400": { description: "Invalid input" }, "404": { description: "Unknown asset" } },
       },
       post: {
         summary: "Same as GET, with a JSON body { side, asset, qty, split? }",
